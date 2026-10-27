@@ -1,6 +1,6 @@
 """fotolese.web.gesichter – Gesichter erkennen (YuNet/SFace) und Merkmale (Embeddings) berechnen.
 
-_IW hält je Worker-Prozess die geladenen OpenCV-Modelle. _ueberlappung/_ueberdeckung sind
+_IW hält je Worker-Prozess den Erkenner (GPU oder CPU, siehe gpu). _ueberlappung/_ueberdeckung sind
 hier zuhause, damit index diese Geometrie-Helfer nutzen kann, ohne einen Importzyklus.
 """
 import math
@@ -16,6 +16,7 @@ from PIL import Image, ImageOps
 from fotolese import gemein
 from fotolese.web.konst import THUMB
 from fotolese.web.bild import _draft_groesse, _rgb, als_jpeg, atomar_schreiben, thumb_schluessel
+from fotolese.web.gpu import Erkenner
 
 
 def _ueberlappung(a, b):
@@ -39,20 +40,24 @@ def _ueberdeckung(a, b):
 _IW = {}
 
 
-def _iw_init(yunet, sface, erkenn_px, min_px, vorschau, score=0.5, gegenprobe=0.8):
+def _iw_init(yunet, sface, erkenn_px, min_px, vorschau, score=0.5, gegenprobe=0.8, wahl=None, gpu_jobs=0,
+             zaehler=None):
     warnings.simplefilter("ignore")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
-    _IW.update(erkenn_px=erkenn_px, min_px=min_px, vorschau=vorschau, gegenprobe=gegenprobe, det=None, rec=None)
+    _IW.update(erkenn_px=erkenn_px, min_px=min_px, vorschau=vorschau, gegenprobe=gegenprobe, erk=None)
     if yunet and sface:
         os.environ.setdefault("OPENCV_LOG_LEVEL", "ERROR")
         import cv2
         cv2.setNumThreads(1)
         _IW["cv2"] = cv2
-        _IW["det"] = cv2.FaceDetectorYN.create(yunet, "", (320, 320), score, 0.3, 5000)
-        _IW["rec"] = cv2.FaceRecognizerSF.create(sface, "")
+        if wahl and zaehler is not None:  # nur die ersten gpu_jobs Prozesse rechnen auf der GPU (GPU-Speicher)
+            with zaehler.get_lock():
+                nr, zaehler.value = zaehler.value, zaehler.value + 1
+            wahl = wahl if nr < gpu_jobs else None
+        _IW["erk"] = Erkenner((yunet, sface), score, wahl)
 
 
-def _gegenprobe(cv2, det, src, f, faktor):
+def _gegenprobe(cv2, erk, src, f, faktor):
     """Gesicht im vergrößerten Ausschnitt noch einmal suchen. Echte Gesichter werden in beiden Maßstäben
     sicher gefunden (Test: 0,77–0,95), Muster wie Buchstaben oder Fell nicht (meist 0). Rückgabe: Sicherheit."""
     x, y, w, h = (float(v) * faktor for v in f[:4])
@@ -66,8 +71,7 @@ def _gegenprobe(cv2, det, src, f, faktor):
     k = 320 / max(stueck.shape[:2])
     klein = cv2.resize(stueck, (max(1, round(stueck.shape[1] * k)), max(1, round(stueck.shape[0] * k))),
                        interpolation=cv2.INTER_AREA if k < 1 else cv2.INTER_LINEAR)
-    det.setInputSize((klein.shape[1], klein.shape[0]))
-    _, treffer = det.detect(klein)
+    treffer = erk.erkennen(klein)
     beste = 0.0
     for q in (treffer if treffer is not None else []):
         if _ueberlappung((x, y, w, h), (x0 + q[0] / k, y0 + q[1] / k, q[2] / k, q[3] / k)) > 0.3:
@@ -119,7 +123,7 @@ def _exif_gps(ex):
 def _iw_job(auftrag):
     rel, pfad, groesse, mt, gesichter_an = auftrag
     erg = {"rel": rel, "groesse": groesse, "mtime": mt, "breite": None, "hoehe": None, "zeit": None,
-           "gps": None, "kamera": None, "gesichter": None, "fehler": None}
+           "gps": None, "kamera": None, "gesichter": None, "fehler": None, "rechner": None, "rueckfall": None}
     try:
         with Image.open(pfad) as img:
             ex = img.getexif()
@@ -134,7 +138,7 @@ def _iw_job(auftrag):
             o = ex.get(0x0112, 1)
             w, h = img.size
             erg["breite"], erg["hoehe"] = (h, w) if o in (5, 6, 7, 8) else (w, h)
-            if not (gesichter_an and _IW.get("det")):
+            if not (gesichter_an and _IW.get("erk")):
                 return erg
             if img.format in ("JPEG", "MPO"):
                 img.draft("RGB", _draft_groesse(img.width, img.height, _IW["erkenn_px"]))
@@ -151,11 +155,10 @@ def _iw_job(auftrag):
         if max(bild.size) > _IW["erkenn_px"]:
             erkenn = bild.copy()
             erkenn.thumbnail((_IW["erkenn_px"], _IW["erkenn_px"]), Image.Resampling.LANCZOS)
-        cv2, det, rec = _IW["cv2"], _IW["det"], _IW["rec"]
+        cv2, erk = _IW["cv2"], _IW["erk"]
         a = cv2.cvtColor(np.asarray(erkenn), cv2.COLOR_RGB2BGR)
         bh, bw = a.shape[:2]
-        det.setInputSize((bw, bh))
-        _, treffer = det.detect(a)
+        treffer = erk.erkennen(a)
         s_d = bild.width / bw                                   # dekodiertes Bild : Suchbild
         s_o = max(s_d, (erg["breite"] or bild.width) / bw)      # Original : Suchbild
         quellen = {"erkenn": a}
@@ -181,11 +184,11 @@ def _iw_job(auftrag):
                 art, faktor = ("erkenn", 1.0) if s_d <= 1.001 else ("bild", s_d)
             else:
                 art, faktor = "voll", s_o
-            if _IW["gegenprobe"] > 0 and _gegenprobe(cv2, det, quelle(art), f, faktor) < _IW["gegenprobe"]:
+            if _IW["gegenprobe"] > 0 and _gegenprobe(cv2, erk, quelle(art), f, faktor) < _IW["gegenprobe"]:
                 continue  # nur in einem Maßstab gefunden: wahrscheinlich Muster, kein Gesicht
             g = f.copy()
             g[:14] *= faktor
-            merkmal = rec.feature(rec.alignCrop(quelle(art), g)).astype(np.float32).flatten()
+            merkmal = erk.merkmal(quelle(art), g)
             norm = float(np.linalg.norm(merkmal))
             if norm <= 0:
                 continue
@@ -200,6 +203,7 @@ def _iw_job(auftrag):
             if not any(doppelt(kandidat, k) for k in behalten):
                 behalten.append(kandidat)
         erg["gesichter"] = behalten
+        erg["rechner"], erg["rueckfall"] = ("gpu" if erk.gpu else "cpu"), erk.rueckfall
     except Exception as fehler:
         erg["fehler"] = f"{type(fehler).__name__}: {fehler}"[:200]
     return erg
@@ -209,20 +213,18 @@ class GesichtsSucher:
     """Sucht ein Gesicht an einer angeklickten Stelle – für Gesichter, die der Index übersehen hat.
     Kleines Fenster zuerst (das Gesicht unter dem Klick), großzügige Schwelle, Merkmale aus voller Auflösung."""
 
-    def __init__(self, modelle):
+    def __init__(self, modelle, wahl=lambda: None):
         self.modelle = modelle
+        self.wahl = wahl  # liefert die aktuelle GPU-Wahl des Indexers (None = CPU)
         self.lock = threading.Lock()
-        self.cv2 = self.det = self.rec = None
+        self.erk = self._fuer = None
 
     def suchen(self, pfad, x, y):
         with self.lock:
-            if self.det is None:
-                os.environ.setdefault("OPENCV_LOG_LEVEL", "ERROR")
-                import cv2
-                self.cv2 = cv2
-                self.det = cv2.FaceDetectorYN.create(self.modelle[0], "", (320, 320), 0.5, 0.3, 5000)
-                self.rec = cv2.FaceRecognizerSF.create(self.modelle[1], "")
-            cv2 = self.cv2
+            wahl = self.wahl()
+            if self.erk is None or wahl is not self._fuer:  # erst CPU, nach der GPU-Prüfung die gewählte GPU
+                self.erk, self._fuer = Erkenner(self.modelle, 0.5, wahl), wahl
+            cv2 = self.erk.cv2
             with Image.open(pfad) as img:
                 img.load()
                 bild = _rgb(ImageOps.exif_transpose(img))
@@ -237,8 +239,7 @@ class GesichtsSucher:
                 klein = stueck.resize((max(1, round(stueck.width * f)), max(1, round(stueck.height * f))),
                                       Image.Resampling.LANCZOS)
                 a = cv2.cvtColor(np.asarray(klein), cv2.COLOR_RGB2BGR)
-                self.det.setInputSize((a.shape[1], a.shape[0]))
-                _, treffer = self.det.detect(a)
+                treffer = self.erk.erkennen(a)
                 bester = None
                 for t in (treffer if treffer is not None else []):
                     fx, fy, fw, fh = x0 + t[0] / f, y0 + t[1] / f, t[2] / f, t[3] / f
@@ -249,8 +250,7 @@ class GesichtsSucher:
                     continue
                 g = bester.copy()
                 g[:14] /= f  # Koordinaten im Ausschnitt, volle Auflösung
-                merkmal = self.rec.feature(self.rec.alignCrop(cv2.cvtColor(np.asarray(stueck), cv2.COLOR_RGB2BGR), g))
-                merkmal = merkmal.astype(np.float32).flatten()
+                merkmal = self.erk.merkmal(cv2.cvtColor(np.asarray(stueck), cv2.COLOR_RGB2BGR), g)
                 norm = float(np.linalg.norm(merkmal))
                 fx, fy, fw, fh = x0 + float(g[0]), y0 + float(g[1]), float(g[2]), float(g[3])
                 return {"kasten": (max(fx, 0) / W, max(fy, 0) / H, fw / W, fh / H), "score": float(bester[14]),

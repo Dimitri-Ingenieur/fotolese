@@ -517,7 +517,7 @@ def gesicht_neu(app, daten):
                              "meldung": "Dieses Gesicht ist schon markiert."}
     try:
         if app.sucher is None:
-            app.sucher = GesichtsSucher(app.indexer.modelle)
+            app.sucher = GesichtsSucher(app.indexer.modelle, lambda: app.indexer.gpu)
         fund = app.sucher.suchen(treffer[0], x, y)
     except Exception as fehler:
         return 500, {"fehler": f"Suche fehlgeschlagen: {type(fehler).__name__}: {fehler}"[:200]}

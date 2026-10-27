@@ -1,7 +1,7 @@
 """fotolese.web.index – SQLite-Index (Bilder, Gesichter, Personen) und der Indexer-Thread.
 
-Der Indexer lädt Orts- und Gesichtsmodelle, liest neue Bilder in einem Prozess-Pool
-(gesichter._iw_job) und ordnet Gesichter Personen zu.
+Der Indexer lädt Orts- und Gesichtsmodelle, wählt das Rechenwerk (GPU, sonst CPU – siehe gpu),
+liest neue Bilder in einem Prozess-Pool (gesichter._iw_job) und ordnet Gesichter Personen zu.
 """
 import hashlib
 import os
@@ -11,12 +11,14 @@ import threading
 import traceback
 import urllib.request
 import multiprocessing as mp
+from collections import Counter
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from concurrent.futures.process import BrokenProcessPool
 from importlib.util import find_spec
 
 import numpy as np
 
+from fotolese.web import gpu
 from fotolese.web.konst import GEONAMES_URL, MODELLE
 from fotolese.web.konfig import bilder_text, url_id
 from fotolese.web.orte import Orte
@@ -90,6 +92,10 @@ class Indexer(threading.Thread):
         self.status = {"phase": "Start", "fertig": 0, "gesamt": 0, "meldungen": []}
         self.gesichter_aktiv = False
         self.modelle = (None, None)
+        self.gpu = None  # Ergebnis von gpu.waehlen(): GPU-Kennung oder CPU mit Grund
+        self.prozesse = self.gpu_prozesse = 0  # im laufenden Durchgang: Index-Prozesse, davon auf der GPU
+        self.rechner = Counter()  # Bilder dieser Sitzung je Rechenwerk (gpu/cpu)
+        self.rueckfall = None  # letzter GPU-Fehler, nach dem ein Prozess auf die CPU gewechselt ist
         self.orte = Orte(os.path.join(app.daten, "geonames", "cities1000.zip"), app.ort_min_ew)
         self.weiter = threading.Event()
         self._stopp = False
@@ -161,6 +167,27 @@ class Indexer(threading.Thread):
                 if n:
                     self.meldung(f"Gesichtssuche geändert – {bilder_text(n)} werden neu durchsucht. "
                                  f"Namen und Korrekturen bleiben erhalten.")
+        self.status["phase"] = "Prüfe GPU"
+        self.gpu = gpu.waehlen(self.modelle, a.gpu) if a.gpu_jobs else {"kennung": None, "grund": "GPU_JOBS = 0 gesetzt"}
+        self.meldung(self.rechenwerk(lang=True))
+
+    def rechenwerk(self, lang=False):
+        """Worauf die Gesichtserkennung rechnet – kurz für die Kopfzeile, lang für Terminal und Seite „Personen“."""
+        w = self.gpu
+        if not (self.gesichter_aktiv and w):
+            return ""
+        if not w.get("kennung"):
+            return f"Gesichtserkennung auf der CPU – {w.get('grund') or 'keine GPU'}"
+        text = f"Gesichtserkennung auf der GPU – {w['anzeige']}" + (f", {w['geraet']}" if w.get("geraet") else "")
+        if self.status["phase"] == "Index" and self.gpu_prozesse < self.prozesse:
+            text += f" ({self.gpu_prozesse} von {self.prozesse} Index-Prozessen, übrige CPU)"
+        if self.rueckfall:
+            text += f"; GPU-Fehler, ein Prozess rechnet jetzt auf der CPU: {self.rueckfall}"
+        if lang and w.get("ms_cpu"):
+            text += f". Probe 1280×960: {w['ms_gpu']:.0f} ms statt {w['ms_cpu']:.0f} ms auf der CPU"
+        if lang and self.rechner:
+            text += f". Diese Sitzung: {bilder_text(self.rechner['gpu'])} auf der GPU, {self.rechner['cpu']} auf der CPU"
+        return text
 
     def run(self):
         try:
@@ -348,19 +375,30 @@ class Indexer(threading.Thread):
         self._verarbeiten(todo)
         self.personen_zuordnen()
 
+    def _rechner_merken(self, r):
+        if r.get("rechner"):
+            self.rechner[r["rechner"]] += 1
+        if r.get("rueckfall") and r["rueckfall"] != self.rueckfall:
+            self.rueckfall = r["rueckfall"]
+            self.meldung(f"GPU-Fehler, ein Prozess rechnet jetzt auf der CPU: {self.rueckfall}")
+
     def _verarbeiten(self, todo):
         ctx = mp.get_context("spawn")
-        args = (*self.modelle, self.app.erkenn_px, self.app.min_gesicht, self.app.vorschau.ordner,
-                self.app.gesicht_score, self.app.gegenprobe)
+        app = self.app
+        args = (*self.modelle, app.erkenn_px, app.min_gesicht, app.vorschau.ordner, app.gesicht_score, app.gegenprobe)
+        wahl = self.gpu if self.gpu and self.gpu.get("kennung") else None
         rest, verdacht = list(todo), []
         while rest and not self._stopp:
             fertig, puffer = set(), []
-            self._ex = ProcessPoolExecutor(min(self.app.index_jobs, len(rest)), mp_context=ctx,
-                                           initializer=_iw_init, initargs=args)
+            self.prozesse = min(app.index_jobs, len(rest))
+            self.gpu_prozesse = min(app.gpu_jobs, self.prozesse) if wahl else 0
+            self._ex = ProcessPoolExecutor(self.prozesse, mp_context=ctx, initializer=_iw_init,
+                                           initargs=(*args, wahl, app.gpu_jobs, ctx.Value("i", 0)))
             try:
                 futures = [self._ex.submit(_iw_job, a) for a in rest]
                 for f in as_completed(futures):
                     r = f.result()
+                    self._rechner_merken(r)
                     puffer.append(r)
                     fertig.add(r["rel"])
                     self.status["fertig"] += 1
@@ -381,7 +419,9 @@ class Indexer(threading.Thread):
                 self._ex = None
                 if puffer:
                     self._schreiben(puffer)
-        for a in verdacht:
+        if verdacht:
+            self.prozesse, self.gpu_prozesse = 1, 0
+        for a in verdacht:  # einzeln und auf der CPU: vielleicht hat die GPU den Prozess abstürzen lassen
             if self._stopp:
                 return
             with ProcessPoolExecutor(1, mp_context=ctx, initializer=_iw_init, initargs=args) as einzel:
@@ -390,5 +430,6 @@ class Indexer(threading.Thread):
                 except BrokenProcessPool:
                     r = {"rel": a[0], "groesse": a[2], "mtime": a[3], "breite": None, "hoehe": None, "zeit": None,
                          "gps": None, "kamera": None, "gesichter": [], "fehler": "Absturz beim Lesen"}
+            self._rechner_merken(r)
             self._schreiben([r])
             self.status["fertig"] += 1

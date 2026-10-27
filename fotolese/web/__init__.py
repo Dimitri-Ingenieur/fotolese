@@ -9,6 +9,7 @@ Thematische Module:
   auswahl     – BestOf-Auswahl je Ordner lesen/schreiben
   index       – SQLite-Index und Hintergrund-Indexer (Thread)
   gesichter   – Gesichtserkennung (YuNet/SFace) im Prozess-Pool, Nachsuche
+  gpu         – Gesichtsmodelle auf der GPU (ONNX Runtime/OpenCV): Auswahl, Prüfung, Rückfall auf die CPU
   suche       – Suchanfragen auswerten (Jahr, Ort, Person, Dateiname)
   html        – Seiten und Bausteine der Oberfläche
   server      – HTTP-Server, Handler und Aktionen (Jahr/Person/Gesicht ändern)

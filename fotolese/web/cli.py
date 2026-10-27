@@ -73,6 +73,9 @@ Umgebungsvariablen (Standard in Klammern):
   INDEX      (1)           0 = kein Index (keine Metadaten, Orte, Personen, Filter)
   GESICHTER  (1)           0 = keine Gesichtserkennung
   INDEX_JOBS (Kerne/2)     parallele Prozesse für den Index
+  GPU        (auto)        Gesichtserkennung auf der GPU, wenn eine nutzbar ist (Pakete je Hersteller: README, GPU);
+                           0 = nur CPU; cuda | rocm | directml | coreml | openvino | opencv-cuda | opencl = nur dieses
+  GPU_JOBS   (2)           so viele Index-Prozesse rechnen auf der GPU, die übrigen auf der CPU (mehr = mehr GPU-Speicher)
   ORT_MIN_EW (10000)       „größerer Ort“ = mindestens so viele Einwohner
   NAEHE_KM   (15)          Umkreis für Ortsfilter
   PERSON_SCHWELLE (0.40)   Ähnlichkeit für dieselbe Person (höher = strenger) – wird gelernt
@@ -179,6 +182,8 @@ def main(skript_ordner=None):
     app.passwort = _env("PASSWORT", "")
     app.gesichter = _env("GESICHTER", "1") != "0"
     app.index_jobs = max(1, _env("INDEX_JOBS", max(1, (os.cpu_count() or 2) // 2), int))
+    app.gpu = _env("GPU", "auto")
+    app.gpu_jobs = max(0, _env("GPU_JOBS", 2, int))
     app.ort_min_ew = _env("ORT_MIN_EW", 10000, int)
     app.naehe_km = _env("NAEHE_KM", 15.0, float)
     app.person_schwelle = _env("PERSON_SCHWELLE", 0.40, float)

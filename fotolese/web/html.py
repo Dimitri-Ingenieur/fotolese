@@ -476,16 +476,21 @@ def status_text(app):
     if not app.indexer:
         return "", False
     s = app.indexer.status
+    rechenwerk = app.indexer.rechenwerk()  # GPU oder CPU – leer, solange die Gesichtserkennung aus ist oder lädt
     if s["phase"] == "Index" and s["gesamt"]:
-        return f"Index: {s['fertig']} von {s['gesamt']} Bildern gelesen – Filter noch unvollständig.", True
+        return (f"Index: {s['fertig']} von {s['gesamt']} Bildern gelesen – Filter noch unvollständig."
+                + (f" {rechenwerk}." if rechenwerk else "")), True
     if s["phase"] not in ("fertig", "Index"):
         return f"Index: {s['phase']} …", True
     zahlen = app.index.einer("SELECT (SELECT COUNT(*) FROM bild), (SELECT COUNT(*) FROM gesicht)")
     text = f"Index: {zahlen[0]} Bilder"
     if app.indexer.gesichter_aktiv:
         text += f", {zahlen[1]} Gesichter, {len(personen_gruppen(app.index, 2, False))} Personen"
-    if s["meldungen"] and ("aus" in s["meldungen"][-1]):
-        text += f". {s['meldungen'][-1]}"
+    letzte = s["meldungen"][-1] if s["meldungen"] else ""
+    if "aus" in letzte and not letzte.startswith(("Gesichtserkennung auf der", "GPU-Fehler")):
+        text += f". {letzte}"
+    if rechenwerk:
+        text += f". {rechenwerk}"
     return text, False
 
 
@@ -729,6 +734,8 @@ def personen_seite(app, alle, ignorierte):
     inhalt += (f'<p class="lernstand"><span>{e(lern_zeile(app))}</span>'
                f'<button class="knopf" id="lernen" type="button" title="Schwelle und Abstand aus Ihren Korrekturen '
                f'und Bestätigungen neu einstellen, eindeutige Fälle umsortieren">Jetzt lernen</button></p>')
+    if app.indexer.rechenwerk():
+        inhalt += f'<p class="lernstand"><span>{e(app.indexer.rechenwerk(lang=True))}</span></p>'
     if not personen:
         inhalt += ('<p class="leer">Noch keine Personen. Der Index sucht im Hintergrund nach Gesichtern; '
                    'diese Seite füllt sich, sobald er Fotos gelesen hat.</p>')

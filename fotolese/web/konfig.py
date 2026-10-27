@@ -38,6 +38,10 @@ LERNEN_AB = 5            # neu lernen nach so vielen korrigierten Fehlzuordnunge
 # GESICHT_SCORE = 0.50
 # GEGENPROBE = 0.80
 
+# ---- GPU – Gesichtserkennung auf der Grafikkarte, siehe README (Abschnitt GPU) ----
+# GPU = auto             # auto = GPU, wenn eine nutzbar ist; 0 = nur CPU; oder z. B. cuda, opencl
+# GPU_JOBS = 2           # so viele Index-Prozesse rechnen auf der GPU, die übrigen auf der CPU
+
 # ---- Import ----
 # IMPORT = 1             # 0 = Seite „Import“ aus
 # IMPORT_JOBS = 4        # parallele Prozesse für fotosort; Standard: Hälfte der Kerne

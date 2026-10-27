@@ -23,6 +23,7 @@ auch selbst aufrufen – dann müssen Sie fotosort.py nicht von Hand starten.
 - je Ordner bis zu 3 beste Fotos auswählen → Kopie in `Sortiert/BestOf`
 - Index mit Datum, Ort und Gesichtern; Filter wie `2023, Leipzig, Anna`
 - Gesichter benennen; lernt aus Ihren Korrekturen (`bestof.conf`)
+- Gesichtserkennung auf der Grafikkarte, wenn eine nutzbar ist – NVIDIA, AMD, Intel, Apple ([GPU](#gpu))
 - Seite „Import“: Ordner wählen – bestof.py startet fotosort.py, das ihn ins Archiv kopiert ([mehr](#import-im-browser))
 - doppelte Dateien im Archiv → Papierkorb `Sortiert/.duplikate`
 - Auflösung und Dateigröße unter jedem Foto
@@ -39,6 +40,8 @@ conda activate fotosort
 ```
 
 Oder pip: `python -m pip install -r requirements.txt`
+
+Für die Gesichtserkennung auf der Grafikkarte kommt ein Paket je Hersteller dazu – siehe [GPU](#gpu).
 
 ## Nutzung
 
@@ -89,6 +92,46 @@ Voraussetzungen: `fotosort.py` liegt neben `bestof.py` (wie im Projektordner; an
 (`HOST=127.0.0.1`, Standard) oder ein `PASSWORT` gesetzt ist; `IMPORT=0` schaltet sie ganz ab.
 `IMPORT_JOBS` legt fest, wie viele Prozesse fotosort.py beim Import nutzt (HDD/USB: z. B. 2–4).
 
+## GPU
+
+Die Gesichtserkennung in bestof.py (Index, Gegenprobe, Klick ins Gesicht) rechnet auf der
+Grafikkarte, wenn eine nutzbar ist – ohne Einstellung. Beim Start prüft bestof.py die vorhandenen
+Möglichkeiten und nimmt die erste, die dieselben Ergebnisse wie die CPU liefert und schneller ist;
+sonst bleibt alles auf der CPU. Gesichter und Merkmale sind auf GPU und CPU gleich, ein Wechsel löst
+keine neue Gesichtssuche aus.
+
+Ob die GPU rechnet, steht in der Kopfzeile jeder Seite, z. B. „Gesichtserkennung auf der GPU – CUDA
+(ONNX Runtime), NVIDIA GeForce RTX 3060“, mit Messwerten auf der Seite „Personen“ und im Terminal.
+Rechnet die CPU, steht dort der Grund, etwa „keine GPU gefunden“ oder „libcublasLt.so.13 fehlt“ samt
+dem passenden Installationsbefehl.
+
+Dafür braucht es ein zusätzliches Paket in der Umgebung von bestof.py – nur eines der
+`onnxruntime`-Pakete, sie schließen sich gegenseitig aus:
+
+| Grafikkarte | Paket | Hinweis |
+|---|---|---|
+| NVIDIA | `python -m pip install "onnxruntime-gpu[cuda,cudnn]"` | bringt CUDA 13 und cuDNN mit |
+| AMD (Linux) | `python -m pip install onnxruntime-rocm` | braucht eine ROCm-Installation |
+| Intel (Linux, Windows) | `python -m pip install onnxruntime-openvino` | Intel-Grafik oder Arc |
+| jede unter Windows | `python -m pip install onnxruntime-directml` | |
+| Apple Silicon | `python -m pip install onnxruntime` | CoreML |
+| Treiber mit OpenCL | – | kann OpenCV schon; genutzt nur, wenn schneller als die CPU |
+
+NVIDIA: `nvidia-smi` zeigt oben rechts, welche CUDA-Version der Treiber kann. Steht dort 12.x, die
+Fassung für CUDA 12 nehmen: `python -m pip install "onnxruntime-gpu[cuda,cudnn]<1.27"`.
+
+Einstellungen (in `bestof.conf` oder als Umgebungsvariable):
+- `GPU = auto` (Standard) nimmt die GPU, wenn sie nutzbar ist; `GPU = 0` rechnet nur auf der CPU;
+  `GPU = cuda` (oder `rocm`, `directml`, `coreml`, `openvino`, `opencv-cuda`, `opencl`) nimmt genau
+  dieses, auch wenn es nicht schneller ist.
+- `GPU_JOBS = 2`: so viele Index-Prozesse rechnen auf der GPU, die übrigen weiter auf der CPU –
+  zusammen sind sie am schnellsten. Jeder GPU-Prozess belegt eigenen GPU-Speicher; bei einer großen
+  Karte lohnt ein höherer Wert.
+
+Auf der CPU bleiben das Lesen der Fotos, die Vorschaubilder und fotosort.py – dort geht die Zeit ins
+Lesen und Dekodieren der Dateien, nicht ins Rechnen. TensorRT und MIGraphX nutzt bestof.py nicht: Sie
+übersetzen das Netz für jede neue Bildgröße neu.
+
 ## Aufbau
 
 `fotosort.py` und `bestof.py` sind schlanke Starter. Die Funktionalität liegt im Paket
@@ -121,6 +164,7 @@ fotolese/                    Projektordner
 │       ├── auswahl.py       BestOf-Auswahl je Ordner, Kopien in BestOf
 │       ├── index.py         SQLite-Index und Hintergrund-Indexer
 │       ├── gesichter.py     Gesichtserkennung (YuNet/SFace) im Prozess-Pool
+│       ├── gpu.py           Gesichtsmodelle auf der GPU: Auswahl, Prüfung, Rückfall auf CPU
 │       ├── suche.py         Suchbegriffe deuten: Jahr, Ort, Person, Ordner, Dateiname
 │       ├── html.py          Seiten, CSS und JavaScript der Oberfläche
 │       ├── server.py        HTTP-Handler und /api-Aktionen
