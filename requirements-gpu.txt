@@ -1,0 +1,10 @@
+# Wie requirements.txt, dazu die Gesichtserkennung auf der GPU (README, Abschnitt GPU):
+#   NVIDIA unter Linux und Windows: onnxruntime-gpu, bringt CUDA 13 und cuDNN mit.
+#     Kann der Treiber nur CUDA 12 (nvidia-smi zeigt oben rechts 12.x), in der Zeile unten
+#     hinter [cuda,cudnn] noch <1.27 einfügen.
+#   Apple Silicon: onnxruntime (CoreML).
+#   AMD, Intel oder DirectML: requirements.txt und das Paket aus der README-Tabelle nehmen –
+#   nur ein onnxruntime-Paket installieren, sie schließen sich gegenseitig aus.
+-r requirements.txt
+onnxruntime-gpu[cuda,cudnn]; (sys_platform == "linux" and platform_machine == "x86_64") or (sys_platform == "win32" and platform_machine == "AMD64")
+onnxruntime; sys_platform == "darwin" and platform_machine == "arm64"

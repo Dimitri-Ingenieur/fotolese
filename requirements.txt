@@ -1,3 +1,4 @@
+# Alles auf der CPU. Mit Gesichtserkennung auf der GPU (NVIDIA, Apple Silicon): requirements-gpu.txt
 pillow
 numpy
 rawpy

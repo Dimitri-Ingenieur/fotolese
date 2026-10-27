@@ -1,0 +1,18 @@
+# Wie environment.yml, dazu die Gesichtserkennung auf der GPU (README, Abschnitt GPU):
+# NVIDIA unter Linux und Windows (CUDA 13 und cuDNN kommen mit), Apple Silicon (CoreML).
+# Neue Umgebung:        conda env create -f environment-gpu.yml
+# vorhandene ergänzen:  conda env update -f environment-gpu.yml
+# Treiber nur für CUDA 12 (nvidia-smi zeigt 12.x): hinter [cuda,cudnn] noch <1.27 einfügen.
+name: fotosort
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pillow
+  - numpy
+  - rawpy
+  - pip
+  - pip:
+      - opencv-python-headless
+      - 'onnxruntime-gpu[cuda,cudnn]; (sys_platform == "linux" and platform_machine == "x86_64") or (sys_platform == "win32" and platform_machine == "AMD64")'
+      - 'onnxruntime; sys_platform == "darwin" and platform_machine == "arm64"'

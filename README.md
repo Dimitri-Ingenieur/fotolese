@@ -35,13 +35,14 @@ Conda:
 ```bash
 git clone https://github.com/IHR-GITHUB-NAME/fotolese.git
 cd fotolese
-conda env create -f environment.yml
+conda env create -f environment.yml        # nur CPU
+conda env create -f environment-gpu.yml    # oder: mit GPU (NVIDIA, Apple Silicon)
 conda activate fotosort
 ```
 
-Oder pip: `python -m pip install -r requirements.txt`
-
-Für die Gesichtserkennung auf der Grafikkarte kommt ein Paket je Hersteller dazu – siehe [GPU](#gpu).
+Oder pip: `python -m pip install -r requirements.txt`, mit GPU `requirements-gpu.txt`.
+Eine vorhandene Umgebung bekommt die GPU-Pakete mit `conda env update -f environment-gpu.yml`.
+AMD, Intel und DirectML unter Windows: siehe [GPU](#gpu).
 
 ## Nutzung
 
@@ -105,8 +106,10 @@ Ob die GPU rechnet, steht in der Kopfzeile jeder Seite, z. B. „Gesichtserkennu
 Rechnet die CPU, steht dort der Grund, etwa „keine GPU gefunden“ oder „libcublasLt.so.13 fehlt“ samt
 dem passenden Installationsbefehl.
 
-Dafür braucht es ein zusätzliches Paket in der Umgebung von bestof.py – nur eines der
-`onnxruntime`-Pakete, sie schließen sich gegenseitig aus:
+Dafür braucht es ein zusätzliches Paket in der Umgebung von bestof.py. Für NVIDIA und Apple Silicon
+bringen es `environment-gpu.yml` und `requirements-gpu.txt` mit (siehe [Installation](#installation));
+sonst eines aus der Tabelle nachinstallieren – nur eines der `onnxruntime`-Pakete, sie schließen sich
+gegenseitig aus:
 
 | Grafikkarte | Paket | Hinweis |
 |---|---|---|
@@ -118,7 +121,8 @@ Dafür braucht es ein zusätzliches Paket in der Umgebung von bestof.py – nur 
 | Treiber mit OpenCL | – | kann OpenCV schon; genutzt nur, wenn schneller als die CPU |
 
 NVIDIA: `nvidia-smi` zeigt oben rechts, welche CUDA-Version der Treiber kann. Steht dort 12.x, die
-Fassung für CUDA 12 nehmen: `python -m pip install "onnxruntime-gpu[cuda,cudnn]<1.27"`.
+Fassung für CUDA 12 nehmen: `python -m pip install "onnxruntime-gpu[cuda,cudnn]<1.27"` – in den beiden
+GPU-Dateien dafür hinter `[cuda,cudnn]` noch `<1.27` einfügen.
 
 Einstellungen (in `bestof.conf` oder als Umgebungsvariable):
 - `GPU = auto` (Standard) nimmt die GPU, wenn sie nutzbar ist; `GPU = 0` rechnet nur auf der CPU;
@@ -171,8 +175,10 @@ fotolese/                    Projektordner
 │       ├── lernen.py        aus Korrekturen Schwelle und Abstand lernen
 │       ├── importieren.py   Seite „Import“: startet fotosort.py, bereinigt Duplikate
 │       └── cli.py           main() und Hilfetext (-h)
-├── environment.yml          Conda-Umgebung
-├── requirements.txt         Pakete für pip
+├── environment.yml          Conda-Umgebung (CPU)
+├── environment-gpu.yml      Conda-Umgebung mit GPU (NVIDIA, Apple Silicon)
+├── requirements.txt         Pakete für pip (CPU)
+├── requirements-gpu.txt     Pakete für pip mit GPU (NVIDIA, Apple Silicon)
 └── LICENSE
 ```
 

@@ -1,3 +1,4 @@
+# Alles auf der CPU. Mit Gesichtserkennung auf der GPU (NVIDIA, Apple Silicon): environment-gpu.yml
 name: fotosort
 channels:
   - conda-forge
