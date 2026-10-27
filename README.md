@@ -33,7 +33,7 @@ auch selbst aufrufen – dann müssen Sie fotosort.py nicht von Hand starten.
 Conda:
 
 ```bash
-git clone https://github.com/IHR-GITHUB-NAME/fotolese.git
+git clone https://github.com/Dimitri-Ingenieur/fotolese.git
 cd fotolese
 conda env create -f environment.yml        # nur CPU
 conda env create -f environment-gpu.yml    # oder: mit GPU (NVIDIA, Apple Silicon)
