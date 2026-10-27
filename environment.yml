@@ -1,0 +1,11 @@
+name: fotosort
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pillow
+  - numpy
+  - rawpy
+  - pip
+  - pip:
+      - opencv-python-headless
