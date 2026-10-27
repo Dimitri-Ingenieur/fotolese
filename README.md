@@ -8,6 +8,10 @@ and lets you pick the best shots in a local web UI (German UI).*
 
 ## Was es macht
 
+Zwei Programme, die zusammenarbeiten: fotosort.py sortiert Fotos in ein Archiv, in bestof.py sehen
+Sie es im Browser durch und wählen die besten aus. bestof.py kann fotosort.py über die Seite „Import“
+auch selbst aufrufen – dann müssen Sie fotosort.py nicht von Hand starten.
+
 **fotosort.py** – Kommandozeile (Paket `fotolese/sort/`)
 - legt ähnliche Fotos und Serienbilder in nummerierte Ordner `0001`–`9999`
 - ergänzt passende bestehende Ordner; gleiche Dateinamen bekommen einen Laufindex (`IMG_0001_1.JPG`)
@@ -19,7 +23,7 @@ and lets you pick the best shots in a local web UI (German UI).*
 - je Ordner bis zu 3 beste Fotos auswählen → Kopie in `Sortiert/BestOf`
 - Index mit Datum, Ort und Gesichtern; Filter wie `2023, Leipzig, Anna`
 - Gesichter benennen; lernt aus Ihren Korrekturen (`bestof.conf`)
-- Seite „Import“: Ordner im Browser wählen, fotosort.py kopiert ihn ins Archiv
+- Seite „Import“: Ordner wählen – bestof.py startet fotosort.py, das ihn ins Archiv kopiert ([mehr](#import-im-browser))
 - doppelte Dateien im Archiv → Papierkorb `Sortiert/.duplikate`
 - Auflösung und Dateigröße unter jedem Foto
 
@@ -38,6 +42,8 @@ Oder pip: `python -m pip install -r requirements.txt`
 
 ## Nutzung
 
+**Weg 1 – Kommandozeile:** fotosort.py selbst aufrufen, danach mit bestof.py auswählen.
+
 ```bash
 MODUS=test python fotosort.py EINGABE AUSGABE   # nur Plan, nichts wird bewegt
 MODUS=copy python fotosort.py EINGABE AUSGABE   # kopieren, Quelle bleibt
@@ -45,8 +51,43 @@ python fotosort.py EINGABE AUSGABE              # verschieben (Standard)
 python bestof.py AUSGABE                        # Browser öffnet http://127.0.0.1:8765
 ```
 
+**Weg 2 – alles im Browser:** nur bestof.py starten und Fotos auf der Seite „Import“ holen;
+bestof.py ruft fotosort.py dann selbst auf (siehe [Import im Browser](#import-im-browser)).
+
+```bash
+mkdir AUSGABE              # nur beim ersten Mal: leeres Archiv anlegen
+python bestof.py AUSGABE   # dann Seite „Import“ → Ordner wählen → „In Sortiert kopieren“
+```
+
 Alle Einstellungen: `python fotosort.py -h` und `python bestof.py -h`.
 bestof.py legt beim ersten Start `bestof.conf` neben sich an (im Projektordner, nicht in `fotolese/web/`).
+
+### Import im Browser
+
+Die Seite „Import“ ist eine Oberfläche für fotosort.py: bestof.py sortiert nicht selbst, sondern
+ruft fotosort.py auf und räumt danach auf.
+
+1. **Ordner wählen.** Die Seite zeigt die Ordner des Rechners, auf dem bestof.py läuft, mit
+   Schnellzugriff auf persönlichen Ordner, Bilder und eingehängte Laufwerke (SD-Karte, USB-Platte).
+   Hochgeladen wird nichts – auch nicht, wenn die Seite auf Tablet oder Handy offen ist.
+2. **„In Sortiert kopieren“.** bestof.py startet `fotosort.py QUELLE AUSGABE` als eigenen Prozess,
+   immer mit `MODUS=copy` (die Quelle bleibt unverändert) und ohne Rückfrage. Fortschrittsbalken
+   und Ausgabe von fotosort.py erscheinen im Browser.
+3. **Duplikate bereinigen.** Danach behält das Archiv von jedem Inhalt (SHA-256) genau eine Datei:
+   bevorzugt die in BestOf ausgewählte, dann eine mit Ihren Labels, dann die ohne Laufindex.
+   Überzählige kommen in den Papierkorb `Sortiert/.duplikate/<Zeit>/` (mit `liste.csv`).
+   „Papierkorb leeren“ löscht sie endgültig, „Jetzt prüfen“ bereinigt auch ohne Import.
+4. **Einlesen.** Der Index liest die neuen Bilder sofort ein (Datum, Ort, Gesichter).
+
+„Abbrechen“ stoppt fotosort.py sauber (ein gerade kopierter Ordner wird noch fertig); schon
+Kopiertes bleibt im Archiv. „Import rückgängig“ ruft fotosort.py mit `MODUS=undo` auf und entfernt
+die Kopien des letzten Imports. Das Protokoll liegt im Archiv; nach einem Neustart von
+bestof.py geht das auch auf der Kommandozeile: `MODUS=undo python fotosort.py AUSGABE/fotosort_<zeit>.csv`.
+
+Voraussetzungen: `fotosort.py` liegt neben `bestof.py` (wie im Projektordner; an anderem Ort
+`FOTOSORT` setzen). Die Seite ist nur freigegeben, wenn bestof.py ausschließlich am eigenen Rechner erreichbar ist
+(`HOST=127.0.0.1`, Standard) oder ein `PASSWORT` gesetzt ist; `IMPORT=0` schaltet sie ganz ab.
+`IMPORT_JOBS` legt fest, wie viele Prozesse fotosort.py beim Import nutzt (HDD/USB: z. B. 2–4).
 
 ## Aufbau
 
@@ -95,8 +136,11 @@ fotolese/                    Projektordner
   müssen aber neben dem Ordner `fotolese/` liegen. Wer sie an einen anderen Ort kopiert,
   nimmt `fotolese/` mit – sonst `ModuleNotFoundError: No module named 'fotolese'`.
 - `sort` und `web` importieren sich nicht gegenseitig; gemeinsamer Code liegt in `gemein.py`.
-  bestof braucht fotosort nur für die Seite „Import“ und startet dafür `fotosort.py` neben
-  `bestof.py` als eigenen Prozess (anderer Ort: `FOTOSORT` setzen).
+  Verbunden sind sie nur über den [Import im Browser](#import-im-browser): `web/importieren.py`
+  startet `fotosort.py` mit demselben Python als Unterprozess (`MODUS=copy`, `DUPLIKATE=1`,
+  `JOBS` aus `IMPORT_JOBS`, `JA=1`, `FORTSCHRITT_JSON=1`) und liest dessen Ausgabe mit:
+  `#FS {json}`-Zeilen (aus `sort/bericht.py`) für den Fortschrittsbalken, die Zeile
+  `Protokoll: …` für „Import rückgängig“.
 
 ## Datenschutz
 
@@ -118,7 +162,8 @@ Nicht Teil dieses Repositorys. bestof.py lädt sie beim ersten Start nach `~/.ca
 
 ## Haftung
 
-Benutzung auf eigene Gefahr. fotosort.py verschiebt im Standard (`MODUS=move`).
+Benutzung auf eigene Gefahr. fotosort.py verschiebt im Standard (`MODUS=move`); der Import in
+bestof.py kopiert nur.
 Probieren Sie es zuerst mit `MODUS=test` oder an einer Kopie.
 
 ## Lizenz
