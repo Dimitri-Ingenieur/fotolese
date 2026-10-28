@@ -11,6 +11,7 @@ from fotolese.web.konst import MONATE
 from fotolese.web.konfig import (anzeige, bilder_text, bildmasse, datum_kurz, e, groesse_text,
                                  name_aus_id, ort_text, url_id, zeit_text)
 from fotolese.web.suche import suche_ausfuehren
+from fotolese.web.alben import alben_liste, alben_von
 from fotolese.web.index import namensliste, personen_namen
 from fotolese.web.lernen import lern_zeile
 
@@ -18,7 +19,7 @@ from fotolese.web.lernen import lern_zeile
 CSS = """
 :root{
   --umfeld:#333;--flaeche:#3b3b3b;--linie:#4f4f4f;--text:#ececec;--leise:#a9a9a9;
-  --stift:#f2c14e;--fehler:#e8735a;--lupe:#2a2a2a;
+  --stift:#f2c14e;--fehler:#e8735a;--lupe:#2a2a2a;--album:#8ecae6;
   --zahl:"Ubuntu Condensed","DejaVu Sans Condensed","Roboto Condensed","Arial Narrow",sans-serif;
   --schrift:system-ui,Ubuntu,"Noto Sans","DejaVu Sans",sans-serif;
   color-scheme:dark;
@@ -193,11 +194,38 @@ kbd{font-family:var(--zahl);border:1px solid var(--linie);padding:0 5px;border-r
   background:var(--stift);color:#1f1f1f;font-weight:700;display:none}
 .wahl.an .haken{display:block}
 .quelle{padding:0 16px 24px;color:var(--leise);font-size:12px}
+/* Alben */
+select{font:inherit;color:inherit;padding:5px 8px;background:var(--flaeche);border:1px solid var(--linie);border-radius:2px}
+.alben{width:100%;display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-height:1.3em}
+.achip{font-size:12px;padding:0 8px;border:1px solid var(--album);border-radius:999px;color:var(--album);
+  text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.achip:hover{background:var(--album);color:#1f1f1f}
+.aplus{font-size:12px}
+.knopf.amark{font-size:13px;padding:2px 9px}
+.knopf.amark.an,.lupe .knopf.almark.an{border-color:var(--album);color:var(--album)}
+.imalbum .rahmen{outline:3px solid var(--album);outline-offset:-3px}
+.albumleiste{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;
+  padding:10px 16px;background:var(--umfeld);border-bottom:1px solid var(--linie)}
+.albumleiste.aktiv{border-bottom-color:var(--album)}
+.albumleiste.aktiv select{border-color:var(--album)}
+.albbox{position:fixed;left:50%;bottom:150px;transform:translateX(-50%);z-index:12;width:min(92vw,26em);display:grid;
+  gap:10px;padding:12px 14px;background:var(--flaeche);border:1px solid var(--linie);border-radius:3px;
+  box-shadow:0 8px 28px rgba(0,0,0,.5)}
+.albbox .atitel{margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.aliste{display:grid;gap:5px;max-height:40vh;overflow:auto}
+.aliste label{display:flex;align-items:center;gap:7px;cursor:pointer}
+.aliste input{accent-color:var(--album);width:17px;height:17px}
+.alneu{display:flex;gap:6px}
+.alneu input{flex:1;min-width:0;padding:6px 9px;background:var(--umfeld);border:1px solid var(--linie);border-radius:2px}
+.lupe .lalben{display:flex;flex-wrap:wrap;gap:4px;padding-top:2px}
+.albumneu{gap:8px}.albumneu .pname{font-size:15px;width:min(22em,100%)}
+.albumkachel .bild{display:block}.albumkachel .zeile{flex-wrap:wrap}.albumkachel .pname{font-size:17px;width:100%}
 @media (max-width:560px){
   .titel h1{font-size:48px}.raster{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}
   .bogen{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
   .feld .waehlen{width:100%}
   .suche{flex-basis:100%;max-width:none}
+  .albumleiste{position:static}
 }
 @media (prefers-reduced-motion:reduce){.fettstift{transition:none}}
 """
@@ -351,7 +379,7 @@ function lupeZeichne(){const b=D.bilder[aktiv],l=D.auswahl[b.ordner]||[],an=l.in
  lupeInfo.textContent=[b.jm?'':b.z,b.ol,namenVon(b,true).join(', ')].filter(Boolean).join(', ');
  if(lupeJahr&&document.activeElement!==lupeJahr)jahrFeld(lupeJahr,b);lupeKarte.hidden=!b.k;if(b.k)lupeKarte.href=b.k;
  gzKnopf.hidden=!D.gesichter;gzKnopf.textContent='Gesichter'+(b.f.length?' ('+b.f.length+')':'');
- lupeKnopf.textContent=an?'Abwählen':'Auswählen';lupeKnopf.setAttribute('aria-pressed',an);kaesten();}
+ lupeKnopf.textContent=an?'Abwählen':'Auswählen';lupeKnopf.setAttribute('aria-pressed',an);kaesten();albenLupe();}
 function oeffne(i){nbox.hidden=true;nGesicht=null;aktiv=(i+D.bilder.length)%D.bilder.length;const b=D.bilder[aktiv];
  lupeImg.src=b.g;lupeImg.alt=b.name;lupeOrig.href=b.o;lupe.hidden=false;lupeZeichne();if(gesichterAn)gesichterHolen(aktiv);
  vorladen(aktiv+1);vorladen(aktiv-1);lupe.querySelector('.zu').focus({preventScroll:true});}
@@ -368,7 +396,8 @@ let wischX=null;lupe.addEventListener('touchstart',ev=>{wischX=ev.touches[0].cli
 lupe.addEventListener('touchend',ev=>{if(wischX===null)return;const dx=ev.changedTouches[0].clientX-wischX;wischX=null;
  if(Math.abs(dx)>60)oeffne(aktiv+(dx<0?1:-1));});
 document.addEventListener('keydown',ev=>{
- if(ev.altKey||ev.ctrlKey||ev.metaKey||ev.target.matches('input'))return;
+ if(ev.altKey||ev.ctrlKey||ev.metaKey||ev.target.matches('input,select'))return;
+ if(albenOffen()){if(ev.key==='Escape'){albenZu();ev.preventDefault();}return;}
  if(aktiv>=0){
   if(!nbox.hidden&&ev.key==='Escape'){nennenZu();ev.preventDefault();}
   else if(ev.key==='ArrowRight'){oeffne(aktiv+1);ev.preventDefault();}
@@ -376,6 +405,7 @@ document.addEventListener('keydown',ev=>{
   else if(ev.key===' '||ev.key==='b'){umschalten(aktiv);ev.preventDefault();}
   else if(ev.key==='g'||ev.key==='G'){gesichterAn=!gesichterAn;if(!gesichterAn)nbox.hidden=true;else gesichterHolen(aktiv);kaesten();}
   else if((ev.key==='j'||ev.key==='J')&&lupeJahr){lupeJahr.focus();lupeJahr.select();ev.preventDefault();}
+  else if(ev.key==='a'||ev.key==='A'){albumTaste();ev.preventDefault();}
   else if(ev.key==='Escape'){schliesse();}
  }else if(D.einordner){
   if(ev.key==='ArrowRight'&&D.weiter)location.href=D.weiter;
@@ -447,6 +477,117 @@ document.querySelectorAll('.gesicht .nennen').forEach(k=>k.addEventListener('cli
  if(!ok){meldung(j.fehler||'Fehlgeschlagen.',true);return;}meldung(j.meldung);setTimeout(()=>location.reload(),1200);}));
 """
 
+JS_ALBEN = """
+const ALB=D.alben||null,albLeisteEl=document.getElementById('albumleiste'),aktSel=document.getElementById('aktalbum'),
+ albInfo=document.getElementById('albuminfo'),albAlle=document.getElementById('albumalle'),albRaus=document.getElementById('albumraus'),
+ albbox=document.querySelector('.albbox'),lalben=lupe.querySelector('.lalben'),lalbKnopf=lupe.querySelector('.alb'),
+ lmarkKnopf=lupe.querySelector('.almark');
+let aktAlbum=null,albLetzte=-1,albBild=-1;
+function albPfad(b){return b.ordner+'/'+b.id;}
+function albName(id){const a=(ALB||[]).find(x=>x.id===id);return a?a.name:'';}
+function albSortiert(ids){return (ALB||[]).filter(a=>ids.includes(a.id));}  // ALB kommt nach Namen sortiert
+function albLink(a){const l=document.createElement('a');l.className='achip';l.textContent=a.name;
+ l.href='/suche?q='+encodeURIComponent('Album '+a.name);l.title='Alle Fotos im Album „'+a.name+'“';return l;}
+function feldAlben(i){const b=D.bilder[i],f=felder[i],s=f&&f.querySelector('.alben');if(!ALB||!s)return;
+ const ids=b.a||[],an=aktAlbum!==null&&ids.includes(aktAlbum),k=document.createElement('button');
+ f.classList.toggle('imalbum',an);k.type='button';
+ if(aktAlbum!==null){k.className='knopf amark'+(an?' an':'');k.textContent=(an?'✓ ':'＋ ')+albName(aktAlbum);
+  k.setAttribute('aria-pressed',an);k.title=(an?'Aus dem Album nehmen':'Ins Album aufnehmen')+
+   ' – mit Umschalt alle Fotos bis zum zuletzt angeklickten';k.addEventListener('click',ev=>albumKlick(i,ev.shiftKey));}
+ else{k.className='link aplus';k.textContent=ids.length?'＋':'＋ Album';k.title='Alben zuordnen';
+  k.addEventListener('click',()=>albenOeffnen(i));}
+ s.replaceChildren(...albSortiert(ids.filter(id=>id!==aktAlbum)).map(albLink),k);}  // aktives Album zeigt der Knopf
+function albAlleZeichnen(){D.bilder.forEach((_,i)=>feldAlben(i));albLeiste();if(aktiv>=0)albenLupe();if(albenOffen())albenListe();}
+function albUebernehmen(j){if(j.alben)ALB.splice(0,ALB.length,...j.alben);
+ if(j.a)D.bilder.forEach(b=>{const p=albPfad(b);if(p in j.a)b.a=j.a[p];});
+ if(j.neu_laden)setTimeout(()=>location.reload(),1500);
+ albAuswahl();if(aktAlbum!==null&&!ALB.some(a=>a.id===aktAlbum))albAktiv(null);else albAlleZeichnen();}
+async function albSetzen(daten){const [ok,j]=await post('/api/album_bild',daten);
+ if(!ok){meldung(j.fehler||'Speichern fehlgeschlagen.',true);return false;}albUebernehmen(j);meldung(j.meldung);return true;}
+function albumKlick(i,bereich){if(aktAlbum===null||i<0)return;const an=!(D.bilder[i].a||[]).includes(aktAlbum);let von=i,bis=i;
+ if(bereich&&albLetzte>=0){von=Math.min(albLetzte,i);bis=Math.max(albLetzte,i);}albLetzte=i;
+ const pfade=[];for(let k=von;k<=bis;k++)pfade.push(albPfad(D.bilder[k]));albSetzen({album:aktAlbum,an,pfade});}
+function albAuswahl(){if(!aktSel)return;
+ aktSel.replaceChildren(new Option(ALB.length?'Fotos markieren für Album …':'Noch kein Album',''),
+  ...ALB.map(a=>new Option(a.name+' ('+a.n+')',String(a.id))));aktSel.value=aktAlbum===null?'':String(aktAlbum);}
+function albAktiv(id){aktAlbum=id!==null&&(ALB||[]).some(a=>a.id===id)?id:null;albLetzte=-1;
+ try{if(aktAlbum===null)localStorage.removeItem('bestofAlbum');else localStorage.setItem('bestofAlbum',String(aktAlbum));}catch(_){}
+ if(aktSel)aktSel.value=aktAlbum===null?'':String(aktAlbum);if(albLeisteEl)albLeisteEl.classList.toggle('aktiv',aktAlbum!==null);
+ albAlleZeichnen();}
+function albLeiste(){if(!albLeisteEl)return;const an=aktAlbum!==null;albAlle.hidden=albRaus.hidden=!an;
+ if(!an){albInfo.textContent=ALB.length?'Album wählen, dann Fotos mit ＋ hinzufügen.':'Neues Album anlegen, dann Fotos mit ＋ hinzufügen.';return;}
+ const n=D.bilder.filter(b=>(b.a||[]).includes(aktAlbum)).length,alle=D.suche?D.treffer:D.bilder.length,mehr=alle>D.bilder.length;
+ albInfo.textContent=n+' von '+D.bilder.length+' hier im Album. ＋ unter dem Foto oder Taste A in der Lupe, Umschalt = Bereich.';
+ albAlle.textContent=mehr?'Alle '+alle+' Treffer hinzufügen':'Alle '+alle+' hinzufügen';
+ albRaus.textContent=mehr?'Alle Treffer entfernen':'Alle entfernen';}
+function albenLupe(){if(!ALB||aktiv<0)return;const ids=D.bilder[aktiv].a||[],an=aktAlbum!==null&&ids.includes(aktAlbum);
+ lalben.replaceChildren(...albSortiert(ids).map(albLink));lalben.hidden=!ids.length;
+ lalbKnopf.textContent='Alben'+(ids.length?' ('+ids.length+')':'');lmarkKnopf.hidden=aktAlbum===null;
+ if(aktAlbum!==null){lmarkKnopf.textContent=(an?'✓ ':'＋ ')+albName(aktAlbum);lmarkKnopf.classList.toggle('an',an);
+  lmarkKnopf.setAttribute('aria-pressed',an);}}
+function albumTaste(){if(!ALB||aktiv<0)return;if(aktAlbum!==null)albumKlick(aktiv,false);else albenOeffnen(aktiv);}
+function albenOffen(){return !!albbox&&!albbox.hidden;}
+function albenOeffnen(i){if(!ALB||!albbox||i<0)return;albBild=i;albenListe();albbox.hidden=false;
+ (albbox.querySelector('.aliste input')||albbox.querySelector('.aname')).focus();}
+function albenZu(){if(!albenOffen())return;albbox.hidden=true;const i=albBild;albBild=-1;
+ const k=aktiv>=0?lalbKnopf:(felder[i]&&felder[i].querySelector('.alben button'));if(k)k.focus({preventScroll:true});}
+function albenListe(){const b=D.bilder[albBild];if(!b)return;const ids=b.a||[],liste=albbox.querySelector('.aliste');
+ albbox.querySelector('.atitel').textContent='Alben für „'+b.name+'“';
+ if(!ALB.length){const p=document.createElement('p');p.className='leise';p.textContent='Noch kein Album – unten eins anlegen.';
+  liste.replaceChildren(p);return;}
+ liste.replaceChildren(...ALB.map(a=>{const l=document.createElement('label'),c=document.createElement('input'),
+  n=document.createElement('span');c.type='checkbox';c.checked=ids.includes(a.id);
+  c.addEventListener('change',()=>albBildSetzen(a.id,c.checked,c));n.className='leise';n.textContent=a.n;
+  l.append(c,a.name,n);return l;}));}
+async function albBildSetzen(id,an,c){const b=D.bilder[albBild];if(!b)return;
+ if(!await albSetzen({album:id,an,pfade:[albPfad(b)]})&&c)c.checked=!an;}
+if(albbox){albbox.querySelector('.alneu').addEventListener('submit',async ev=>{ev.preventDefault();
+  const inp=albbox.querySelector('.aname'),name=inp.value.trim();if(!name)return;
+  const [ok,j]=await post('/api/album',{aktion:'neu',name});if(!ok){meldung(j.fehler||'Anlegen fehlgeschlagen.',true);return;}
+  inp.value='';albUebernehmen(j);await albBildSetzen(j.album,true);});
+ albbox.querySelector('.azu').addEventListener('click',albenZu);
+ albbox.addEventListener('keydown',ev=>{if(ev.key==='Escape'){ev.preventDefault();ev.stopPropagation();albenZu();}});}
+if(albLeisteEl){aktSel.addEventListener('change',()=>albAktiv(aktSel.value?+aktSel.value:null));
+ document.getElementById('albumneu').addEventListener('click',async()=>{
+  const name=prompt('Name des neuen Albums, z. B. Urlaub 2023:','');if(name===null||!name.trim())return;
+  const [ok,j]=await post('/api/album',{aktion:'neu',name});if(!ok){meldung(j.fehler||'Anlegen fehlgeschlagen.',true);return;}
+  albUebernehmen(j);albAktiv(j.album);meldung(j.meldung+' Jetzt Fotos mit ＋ hinzufügen.');});
+ const alleSetzen=an=>{const wo=D.suche?{suche:D.suche}:{ordner:D.ordner},n=D.suche?D.treffer:D.bilder.length,name=albName(aktAlbum);
+  if(an?n>50&&!confirm(n+' Fotos ins Album „'+name+'“ aufnehmen?'):!confirm('Alle '+n+' Fotos '+
+   (D.suche?'dieses Filters':'dieses Ordners')+' aus dem Album „'+name+'“ nehmen? Die Fotos selbst bleiben.'))return;
+  albSetzen(Object.assign({album:aktAlbum,an},wo));};
+ albAlle.addEventListener('click',()=>alleSetzen(true));albRaus.addEventListener('click',()=>alleSetzen(false));}
+lalbKnopf.addEventListener('click',()=>albenOeffnen(aktiv));lmarkKnopf.addEventListener('click',()=>albumKlick(aktiv,false));
+if(ALB){let gemerkt=null;try{gemerkt=localStorage.getItem('bestofAlbum');}catch(_){}
+ albAuswahl();albAktiv(gemerkt?+gemerkt:null);}
+else{lalbKnopf.hidden=lmarkKnopf.hidden=lalben.hidden=true;}
+"""
+
+JS_ALBENSEITE = """
+const neuForm=document.getElementById('neualbum');
+neuForm.addEventListener('submit',async ev=>{ev.preventDefault();const inp=neuForm.querySelector('input'),name=inp.value.trim();
+ if(!name){meldung('Bitte einen Namen eingeben.',true);return;}
+ const [ok,j]=await post('/api/album',{aktion:'neu',name});if(!ok){meldung(j.fehler||'Anlegen fehlgeschlagen.',true);return;}
+ try{localStorage.setItem('bestofAlbum',String(j.album));}catch(_){}
+ meldung(j.meldung+' Es ist zum Markieren gewählt: Ordner öffnen und Fotos mit ＋ hinzufügen.');setTimeout(()=>location.reload(),2200);});
+document.querySelectorAll('.aname').forEach(inp=>{
+ const speichern=async()=>{const name=inp.value.trim();if(name===inp.dataset.alt)return;
+  const [ok,j]=await post('/api/album',{aktion:'umbenennen',id:+inp.dataset.id,name});
+  if(!ok){meldung(j.fehler||'Speichern fehlgeschlagen.',true);inp.value=inp.dataset.alt;return;}
+  inp.value=inp.dataset.alt=j.name;meldung(j.meldung);setTimeout(()=>location.reload(),1200);};
+ inp.addEventListener('change',speichern);
+ inp.addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();inp.blur();}
+  else if(ev.key==='Escape'){inp.value=inp.dataset.alt;inp.blur();}});});
+document.querySelectorAll('.amarkieren').forEach(k=>k.addEventListener('click',()=>{
+ try{localStorage.setItem('bestofAlbum',k.dataset.id);}catch(_){}location.href='/';}));
+document.querySelectorAll('.aloeschen').forEach(k=>k.addEventListener('click',async()=>{
+ if(!confirm('Album „'+k.dataset.name+'“ löschen? Die Fotos bleiben im Archiv, nur diese Zuordnung verschwindet.'))return;
+ const [ok,j]=await post('/api/album',{aktion:'loeschen',id:+k.dataset.id});
+ if(!ok){meldung(j.fehler||'Löschen fehlgeschlagen.',true);return;}
+ try{if(localStorage.getItem('bestofAlbum')===k.dataset.id)localStorage.removeItem('bestofAlbum');}catch(_){}
+ meldung(j.meldung);setTimeout(()=>location.reload(),1200);}));
+"""
+
 
 def json_im_html(daten):
     return json.dumps(daten, ensure_ascii=True).replace("</", "<\\/")
@@ -500,6 +641,7 @@ def kopf(app, aktiv="", inhalt_titel="", suchtext=""):
     if app.import_erlaubt:
         navi.append(("import", "/import", "Import"))
     if app.index:
+        navi.append(("alben", "/alben", "Alben"))
         navi.append(("personen", "/personen", "Personen"))
     links = "".join(f'<a href="{url}"{" aria-current=page" if k == aktiv else ""}>{t}</a>' for k, url, t in navi)
     suche = ""
@@ -542,6 +684,7 @@ def bild_daten(app, ordner, bilder):
 def bogen_html(app, eintraege, einordner):
     """eintraege: [(ordner, name, mtime, groesse)] -> (HTML der Felder, Bilddaten für JS)."""
     meta, gesichter = bild_daten(app, None, [(o, n) for o, n, *_ in eintraege])
+    alben = alben_von(app.index, [f"{o}/{url_id(n)}" for o, n, *_ in eintraege]) if app.index else {}
     masse = []
     for o, name, mt, groesse in eintraege:  # Auflösung: aus dem Index, sonst Dateikopf lesen
         m = meta.get(f"{o}/{url_id(name)}")
@@ -582,13 +725,14 @@ def bogen_html(app, eintraege, einordner):
             f'<button class="knopf waehlen" type="button" aria-pressed="false">Auswählen</button>'
             f'<span class="technik{" spitze" if oben else ""}"'
             + (' title="Höchste Auflösung in diesem Ordner"' if oben else "") + f'>{e(technik)}</span>'
-            f'<span class="meta">{jahr_html}<span class="mtext">{meta_html}</span></span></figcaption></figure>')
+            f'<span class="meta">{jahr_html}<span class="mtext">{meta_html}</span></span>'
+            + ('<span class="alben"></span>' if app.index else "") + '</figcaption></figure>')
         karte = (f"https://www.openstreetmap.org/?mlat={lat:.5f}&mlon={lon:.5f}#map=14/{lat:.5f}/{lon:.5f}"
                  if lat is not None else "")
         daten.append({"id": uid, "ordner": o, "name": anzeige(name), "g": f"/g/{o}/{uid}?v={mt}",
                       "o": f"/orig/{o}/{uid}", "z": zeit_text(zeit), "zm": monat, "ol": ort_text(ort, km, kurz=False),
                       "ok": ort_text(ort, km), "j": jahr, "jm": jm is not None, "k": karte, "f": f, "fs": such_stand,
-                      "t": technik})
+                      "t": technik, "a": alben.get(rel, [])})
     return "".join(felder), daten
 
 
@@ -604,14 +748,28 @@ LUPE_HTML = ('<div class="lupe" hidden role="dialog" aria-label="Lupe"><div clas
              '<div class="leiste"><span class="wo"></span>'
              '<input class="jahr" inputmode="numeric" maxlength="4" placeholder="Jahr" aria-label="Jahr (Taste J)">'
              '<span class="text"><span class="wer"></span>'
-             '<span class="info"></span></span>'
+             '<span class="info"></span><span class="lalben" hidden></span></span>'
              '<button class="knopf zurueck" type="button" aria-label="Voriges Bild">‹</button>'
              '<button class="knopf vor" type="button" aria-label="Nächstes Bild">›</button>'
              '<button class="knopf waehlen" type="button" aria-pressed="false">Auswählen</button>'
+             '<button class="knopf almark" type="button" aria-pressed="false" title="Taste A" hidden></button>'
+             '<button class="knopf alb" type="button" title="Alben zuordnen (Taste A)">Alben</button>'
              '<button class="knopf gz" type="button" title="Taste G">Gesichter</button>'
              '<a class="knopf karte" target="_blank" rel="noopener noreferrer">Karte</a>'
              '<a class="knopf orig" target="_blank" rel="noopener">Original</a>'
              '<button class="knopf zu" type="button">Schließen</button></div></div>')
+
+ALBUMLEISTE = ('<div class="albumleiste" id="albumleiste"><select id="aktalbum" aria-label="Album zum Markieren"></select>'
+               '<button class="knopf" id="albumneu" type="button">Neues Album</button>'
+               '<span class="leise" id="albuminfo"></span>'
+               '<button class="knopf" id="albumalle" type="button" hidden></button>'
+               '<button class="knopf" id="albumraus" type="button" hidden></button></div>')
+
+ALBBOX = ('<div class="albbox" hidden role="dialog" aria-label="Alben zuordnen"><p class="atitel"></p>'
+          '<div class="aliste"></div><form class="alneu"><input class="aname" maxlength="60" autocomplete="off" '
+          'placeholder="Neues Album" aria-label="Neues Album anlegen und zuordnen"><button class="knopf">Anlegen</button>'
+          '</form><div class="nfuss"><a class="link" href="/alben">Alben verwalten</a>'
+          '<button class="link azu" type="button">Fertig</button></div></div>')
 
 
 def ordner_zusammen(app, ordner):
@@ -650,20 +808,23 @@ def ordner_seite(app, ordner):
     if not bilder:
         inhalt += '<p class="leer">In diesem Ordner liegen keine JPG- oder PNG-Bilder.</p>'
     else:
-        inhalt += (f'<main class="bogen">{felder}</main>'
+        inhalt += ((ALBUMLEISTE if app.index else "") + f'<main class="bogen">{felder}</main>'
                    '<p class="hilfe">Bild anklicken zum Vergrößern. In der Lupe: <kbd>←</kbd> <kbd>→</kbd> blättern, '
                    '<kbd>Leertaste</kbd> aus- oder abwählen, <kbd>G</kbd> Gesichter (Namensschild anklicken = benennen, fehlt eins: ins Gesicht klicken), <kbd>J</kbd> Jahr ändern, '
-                   '<kbd>Esc</kbd> schließen. Jahr korrigieren: ins Jahresfeld tippen, Enter; leeren = Jahr aus der Datei.</p>')
-    inhalt += LUPE_HTML
+                   '<kbd>A</kbd> Album, <kbd>Esc</kbd> schließen. Jahr korrigieren: ins Jahresfeld tippen, Enter; leeren = Jahr aus der Datei.'
+                   + (' Alben: oben ein Album wählen, dann ＋ unter den Fotos (Umschalt = Bereich); ein Album unter einem Foto '
+                      'anklicken zeigt alle Fotos darin.' if app.index else '') + '</p>')
+    inhalt += LUPE_HTML + (ALBBOX if app.index else "")
     markiert = app.auswahl.markiert(ordner)
     js = {"einordner": True, "ordner": ordner, "max": app.auswahl.max_best, "bilder": daten, "jahr": bool(app.index),
           "namen": namensliste(app.index), "gesichter": bool(app.indexer and app.indexer.gesichter_aktiv),
           "auswahl": {ordner: [url_id(m) for m in markiert]},
           "ziele": {ordner: {url_id(m): z for m, z in app.auswahl.ziele(ordner).items()}},
           "zurueck": f"/o/{zurueck}" if zurueck else None, "weiter": f"/o/{weiter}" if weiter else None,
-          "offen": f"/weiter/{ordner}", "uebersicht": f"/?seite={seite_nr}"}
+          "offen": f"/weiter/{ordner}", "uebersicht": f"/?seite={seite_nr}",
+          "alben": alben_liste(app.index) if app.index else None}
     inhalt += f'<script type="application/json" id="daten">{json_im_html(js)}</script>'
-    return seite(f"{ordner} – BestOf", inhalt, JS_BOGEN)
+    return seite(f"{ordner} – BestOf", inhalt, JS_BOGEN + JS_ALBEN)
 
 
 def such_seite(app, text, seite_nr):
@@ -689,19 +850,20 @@ def such_seite(app, text, seite_nr):
     elif not eintraege:
         inhalt += '<p class="leer">Keine Fotos passen zu allen Begriffen. Entfernen Sie einen Begriff oder prüfen Sie die Schreibweise.</p>'
     else:
-        inhalt += f'<main class="bogen">{felder}</main>'
+        inhalt += (ALBUMLEISTE if app.index else "") + f'<main class="bogen">{felder}</main>'
         if seiten > 1:
             teile = [f"<span aria-current='page'>{n}</span>" if n == seite_nr else
                      f'<a href="/suche?{urlencode({"q": text, "seite": n})}">{n}</a>' for n in range(1, seiten + 1)]
             inhalt += f'<nav class="seiten" aria-label="Seiten">{"".join(teile)}</nav>'
-    inhalt += LUPE_HTML
+    inhalt += LUPE_HTML + (ALBBOX if app.index else "")
     ordner_menge = sorted({o for o, *_ in eintraege})
     js = {"einordner": False, "max": app.auswahl.max_best, "bilder": daten, "jahr": bool(app.index),
           "namen": namensliste(app.index), "gesichter": bool(app.indexer and app.indexer.gesichter_aktiv),
           "auswahl": {o: [url_id(m) for m in app.auswahl.markiert(o)] for o in ordner_menge},
-          "ziele": {o: {url_id(m): z for m, z in app.auswahl.ziele(o).items()} for o in ordner_menge}}
+          "ziele": {o: {url_id(m): z for m, z in app.auswahl.ziele(o).items()} for o in ordner_menge},
+          "alben": alben_liste(app.index) if app.index else None, "suche": text.strip() or None, "treffer": gesamt}
     inhalt += f'<script type="application/json" id="daten">{json_im_html(js)}</script>'
-    return seite(f"{text} – BestOf", inhalt, JS_BOGEN)
+    return seite(f"{text} – BestOf", inhalt, JS_BOGEN + JS_ALBEN)
 
 
 def personen_gruppen(index, mindest, ignorierte):
@@ -784,6 +946,48 @@ def personen_seite(app, alle, ignorierte):
                'trennen. ✎ ordnet ein einzelnes Gesicht jemand anderem zu – sehr ähnliche Gesichter derselben Gruppe '
                'wandern mit. ✕ entfernt es.</p>')
     return seite("Personen – BestOf", inhalt, JS_PERSONEN)
+
+
+def alben_seite(app):
+    """Alben anlegen, umbenennen, löschen; je Album Titelbild (frühestes Foto), Anzahl und Weg zu den Fotos."""
+    alben = alben_liste(app.index)
+    titelbilder = {}
+    for album, ordner, datei, mt in app.index.q(
+            "SELECT ab.album, b.ordner, b.datei, b.mtime FROM album_bild ab JOIN bild_eff b ON b.pfad = ab.pfad "
+            "ORDER BY b.sortzeit IS NULL, b.sortzeit, b.pfad"):
+        titelbilder.setdefault(album, (ordner, datei, mt))
+    ohne = app.index.einer("SELECT COUNT(*) FROM bild WHERE pfad NOT IN (SELECT pfad FROM album_bild)")[0]
+    titel = (f'<div class="titel"><h1>Alben</h1><div><p>{len(alben)} {"Album" if len(alben) == 1 else "Alben"}</p>'
+             f'<p><a href="/suche?{urlencode({"q": "ohne Album"})}">{bilder_text(ohne)} ohne Album</a></p></div></div>')
+    inhalt = kopf(app, "alben", titel)
+    inhalt += ('<form class="filter albumneu" id="neualbum"><input class="pname" maxlength="60" autocomplete="off" '
+               'placeholder="Neues Album, z. B. Urlaub 2023" aria-label="Name des neuen Albums">'
+               '<button class="knopf haupt">Album anlegen</button></form>')
+    kacheln = []
+    for a in alben:
+        such = urlencode({"q": f"Album {a['name']}"})
+        tb = titelbilder.get(a["id"])
+        bild = f'<img loading="lazy" decoding="async" src="/t/{tb[0]}/{tb[1]}?v={tb[2]}" alt="">' if tb else ""
+        kacheln.append(
+            f'<div class="kachel albumkachel"><a class="bild" href="/suche?{such}" aria-label="Fotos im Album '
+            f'{e(a["name"])}">{bild}</a><div class="zeile"><input class="pname aname" data-id="{a["id"]}" '
+            f'data-alt="{e(a["name"])}" value="{e(a["name"])}" maxlength="60" aria-label="Name des Albums" '
+            f'title="Umbenennen: Namen ändern, Enter"></div><div class="zeile"><span class="leise">'
+            f'{bilder_text(a["n"])}</span></div><div class="zeile"><a class="knopf" href="/suche?{such}">Fotos zeigen</a>'
+            f'<button class="knopf amarkieren" type="button" data-id="{a["id"]}" title="Dieses Album zum Markieren '
+            f'wählen und zu den Ordnern gehen">Markieren</button><button class="knopf aloeschen" type="button" '
+            f'data-id="{a["id"]}" data-name="{e(a["name"])}">Löschen</button></div></div>')
+    if kacheln:
+        inhalt += f'<main class="raster">{"".join(kacheln)}</main>'
+    else:
+        inhalt += '<p class="leer">Noch keine Alben. Legen Sie oben eins an und markieren Sie dann Fotos dafür.</p>'
+    inhalt += ('<p class="hilfe">Ein Foto kann in beliebig vielen Alben stehen. Fotos markieren: einen Ordner oder ein '
+               'Filterergebnis öffnen, oben „Fotos markieren für Album …“ wählen, dann ＋ unter den Fotos anklicken '
+               '(mit <kbd>Umschalt</kbd> alle bis zum zuletzt angeklickten) oder in der Lupe <kbd>A</kbd> drücken; „Alle '
+               'hinzufügen“ nimmt den ganzen Ordner bzw. alle Treffer. Ohne gewähltes Album öffnet ＋ unter einem Foto '
+               'die Liste aller Alben zum Ankreuzen. Im Filter: <i>Album Urlaub</i> oder nur <i>Urlaub</i>, '
+               '<i>ohne Album</i>. Löschen entfernt nur das Album, nicht die Fotos.</p>')
+    return seite("Alben – BestOf", inhalt, JS_ALBENSEITE)
 
 
 def gruppe_pruefen_seite(app, pid):

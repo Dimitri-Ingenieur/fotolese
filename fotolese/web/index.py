@@ -42,6 +42,9 @@ CREATE TABLE IF NOT EXISTS person(id INTEGER PRIMARY KEY, name TEXT, summe BLOB,
 CREATE TABLE IF NOT EXISTS jahr_manuell(pfad TEXT PRIMARY KEY, jahr INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS pruefsumme(pfad TEXT PRIMARY KEY, groesse INTEGER, mtime INTEGER, sha TEXT);
 CREATE TABLE IF NOT EXISTS lernlog(zeit TEXT, art TEXT, gid INTEGER, von TEXT, zu TEXT, aehnlich REAL, abstand REAL);
+CREATE TABLE IF NOT EXISTS album(id INTEGER PRIMARY KEY, name TEXT NOT NULL, angelegt TEXT);
+CREATE TABLE IF NOT EXISTS album_bild(album INTEGER NOT NULL, pfad TEXT NOT NULL, PRIMARY KEY(album, pfad));
+CREATE INDEX IF NOT EXISTS album_bild_pfad ON album_bild(pfad);
 DROP VIEW IF EXISTS bild_eff;
 CREATE VIEW bild_eff AS SELECT b.*,
   COALESCE(k.jahr, b.jahr) AS jahr_eff,

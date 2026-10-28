@@ -23,6 +23,7 @@ auch selbst aufrufen – dann müssen Sie fotosort.py nicht von Hand starten.
 - je Ordner bis zu 3 beste Fotos auswählen → Kopie in `Sortiert/BestOf`
 - Index mit Datum, Ort und Gesichtern; Filter wie `2023, Leipzig, Anna`
 - Gesichter benennen; lernt aus Ihren Korrekturen (`bestof.conf`)
+- Alben: jedes Foto in beliebig vielen Alben, sichtbar unter dem Foto, im Filter nutzbar ([mehr](#alben))
 - Gesichtserkennung auf der Grafikkarte, wenn eine nutzbar ist – NVIDIA, AMD, Intel, Apple ([GPU](#gpu))
 - Seite „Import“: Ordner wählen – bestof.py startet fotosort.py, das ihn ins Archiv kopiert ([mehr](#import-im-browser))
 - doppelte Dateien im Archiv → Papierkorb `Sortiert/.duplikate`
@@ -78,8 +79,9 @@ ruft fotosort.py auf und räumt danach auf.
    immer mit `MODUS=copy` (die Quelle bleibt unverändert) und ohne Rückfrage. Fortschrittsbalken
    und Ausgabe von fotosort.py erscheinen im Browser.
 3. **Duplikate bereinigen.** Danach behält das Archiv von jedem Inhalt (SHA-256) genau eine Datei:
-   bevorzugt die in BestOf ausgewählte, dann eine mit Ihren Labels, dann die ohne Laufindex.
-   Überzählige kommen in den Papierkorb `Sortiert/.duplikate/<Zeit>/` (mit `liste.csv`).
+   bevorzugt die in BestOf ausgewählte, dann eine mit Ihren Labels (Namen, Jahr, Alben), dann die
+   ohne Laufindex. Überzählige kommen in den Papierkorb `Sortiert/.duplikate/<Zeit>/` (mit `liste.csv`),
+   ihre Alben gehen auf die behaltene Datei über.
    „Papierkorb leeren“ löscht sie endgültig, „Jetzt prüfen“ bereinigt auch ohne Import.
 4. **Einlesen.** Der Index liest die neuen Bilder sofort ein (Datum, Ort, Gesichter).
 
@@ -92,6 +94,25 @@ Voraussetzungen: `fotosort.py` liegt neben `bestof.py` (wie im Projektordner; an
 `FOTOSORT` setzen). Die Seite ist nur freigegeben, wenn bestof.py ausschließlich am eigenen Rechner erreichbar ist
 (`HOST=127.0.0.1`, Standard) oder ein `PASSWORT` gesetzt ist; `IMPORT=0` schaltet sie ganz ab.
 `IMPORT_JOBS` legt fest, wie viele Prozesse fotosort.py beim Import nutzt (HDD/USB: z. B. 2–4).
+
+### Alben
+
+Ein Foto kann in beliebig vielen Alben stehen, z. B. in „Urlaub 2023“ und „Familie“. Unter jedem Foto
+stehen seine Alben; ein Klick darauf zeigt alle Fotos des Albums.
+
+1. **Album anlegen** – auf der Seite „Alben“ oder mit „Neues Album“ über den Fotos.
+2. **Fotos markieren** – über den Fotos eines Ordners oder Filterergebnisses „Fotos markieren für
+   Album …“ wählen, dann ＋ unter den Fotos anklicken (mit Umschalt alle bis zum zuletzt angeklickten)
+   oder in der Lupe <kbd>A</kbd> drücken. „Alle hinzufügen“ nimmt den ganzen Ordner bzw. alle Treffer
+   des Filters. Das gewählte Album bleibt beim Wechsel in andere Ordner gewählt.
+3. **Einzeln zuordnen** – ohne gewähltes Album öffnet ＋ unter einem Foto (oder „Alben“ in der Lupe) die
+   Liste aller Alben zum Ankreuzen; dort lässt sich auch gleich ein neues anlegen.
+
+Filtern: `Album Urlaub 2023` oder nur `Urlaub 2023`; mehrere Alben mit Komma zeigen die Fotos aus
+einem davon, kombiniert mit anderem gilt beides (`Urlaub 2023, Anna`). `ohne Album` zeigt, was noch
+nirgends einsortiert ist. Auf der Seite „Alben“ lassen sich Alben umbenennen und löschen – die Fotos
+bleiben dabei im Archiv. Die Alben stehen im Index (`Sortiert/.bestof-index.sqlite3`), so wie Namen und
+Korrekturen: Wer ihn löscht, verliert sie.
 
 ## GPU
 
@@ -166,6 +187,7 @@ fotolese/                    Projektordner
 │       ├── bild.py          Vorschaubilder erzeugen und zwischenspeichern
 │       ├── orte.py          GeoNames offline: GPS → nächster größerer Ort
 │       ├── auswahl.py       BestOf-Auswahl je Ordner, Kopien in BestOf
+│       ├── alben.py         Alben: anlegen, Fotos zuordnen, für Filter und Oberfläche
 │       ├── index.py         SQLite-Index und Hintergrund-Indexer
 │       ├── gesichter.py     Gesichtserkennung (YuNet/SFace) im Prozess-Pool
 │       ├── gpu.py           Gesichtsmodelle auf der GPU: Auswahl, Prüfung, Rückfall auf CPU

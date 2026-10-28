@@ -1,4 +1,4 @@
-"""fotolese.web.suche – Suchbegriffe deuten (Jahr, Monat, Ort, Person, Ordner, Dateiname) und Bilder filtern."""
+"""fotolese.web.suche – Suchbegriffe deuten (Jahr, Monat, Ort, Person, Album, Ordner, Dateiname) und Bilder filtern."""
 import re
 
 from fotolese.web.konst import MONAT_NR, MONATE
@@ -6,15 +6,16 @@ from fotolese.web.konfig import km_zwischen, name_aus_id
 
 
 def suche_ausfuehren(app, text):
-    """Begriffe mit Komma trennen. Gleiche Art = ODER (2022, 2023; Leipzig, Dresden),
+    """Begriffe mit Komma trennen. Gleiche Art = ODER (2022, 2023; Leipzig, Dresden; zwei Alben),
     verschiedene Arten = UND (2023, Juli, Leipzig), Personen immer UND (Anna, Ben = beide drauf)."""
     jahre, monate, jahr_monat, ordner, orte, personen, texte, erklaerung = set(), set(), set(), set(), [], [], [], []
-    namen, anzeige_name, sonder = {}, {}, set()
+    namen, anzeige_name, sonder, alben, album_ids = {}, {}, set(), {}, set()
     if app.index:
         for pid, name in app.index.q("SELECT id, name FROM person"):
             if name:
                 namen.setdefault(name.casefold(), set()).add(pid)
                 anzeige_name[name.casefold()] = name
+        alben = {name.casefold(): (aid, name) for aid, name in app.index.q("SELECT id, name FROM album")}
 
     def deuten(t, nur_pruefen=False):
         k = re.sub(r"\s+", " ", t.casefold())
@@ -27,6 +28,19 @@ def suche_ausfuehren(app, text):
             if not nur_pruefen:
                 sonder.add("korrigiert")
                 erklaerung.append("Jahr von Hand gesetzt")
+            return True
+        if k in ("ohne album", "kein album"):
+            if not nur_pruefen:
+                sonder.add("ohne_album")
+                erklaerung.append("ohne Album")
+            return True
+        m = re.fullmatch(r"album\s*:?\s*(.+)", t.strip(), re.IGNORECASE)
+        if m and k not in alben:  # „Album Urlaub“, „Album: Urlaub“ – auch für Namen wie 2023 oder Leipzig
+            if not nur_pruefen:
+                gesucht = re.sub(r"\s+", " ", m.group(1)).strip()
+                aid, name = alben.get(gesucht.casefold(), (-1, None))  # -1: kein Treffer
+                album_ids.add(aid)
+                erklaerung.append(f"Album {name}" if name else f"Album „{gesucht}“ gibt es nicht")
             return True
         m = re.fullmatch(r"((?:19|20)\d\d)-(\d{1,2})", k)
         if re.fullmatch(r"(19|20)\d\d", k):
@@ -54,6 +68,11 @@ def suche_ausfuehren(app, text):
             if not nur_pruefen:
                 personen.append((namen.get(k) or {int(m.group(1))}, t))
                 erklaerung.append(f"Person {anzeige_name[k]}" if k in namen else f"Person {m.group(1)}")
+            return True
+        if k in alben:
+            if not nur_pruefen:
+                album_ids.add(alben[k][0])
+                erklaerung.append(f"Album {alben[k][1]}")
             return True
         if app.indexer and app.indexer.orte.bereit:
             ort = app.indexer.orte.suchen(t)
@@ -106,6 +125,11 @@ def suche_ausfuehren(app, text):
     for ids, _ in personen:
         sql.append(f"AND pfad IN (SELECT pfad FROM gesicht WHERE person IN ({','.join('?' * len(ids))}))")
         args += sorted(ids)
+    if album_ids:
+        sql.append(f"AND pfad IN (SELECT pfad FROM album_bild WHERE album IN ({','.join('?' * len(album_ids))}))")
+        args += sorted(album_ids)
+    if "ohne_album" in sonder:
+        sql.append("AND pfad NOT IN (SELECT pfad FROM album_bild)")
     sql.append("ORDER BY sortzeit IS NULL, sortzeit, ordner, datei")
     zeilen = app.index.q(" ".join(sql), args)
     if orte:

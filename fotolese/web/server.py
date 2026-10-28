@@ -21,8 +21,9 @@ from fotolese.web.konfig import bilder_text, name_aus_id, url_id
 from fotolese.web.bild import PLATZHALTER
 from fotolese.web.gesichter import GesichtsSucher, _ueberdeckung, _ueberlappung
 from fotolese.web.lernen import _fehler_aehnlichkeit, _lernlog, lernen
-from fotolese.web.html import (bild_daten, gruppe_pruefen_seite, ordner_seite, ordner_zusammen, personen_seite,
-                               status_text, such_seite, uebersicht)
+from fotolese.web.alben import album_api
+from fotolese.web.html import (alben_seite, bild_daten, gruppe_pruefen_seite, ordner_seite, ordner_zusammen,
+                               personen_seite, status_text, such_seite, uebersicht)
 from fotolese.web.importieren import import_api, import_seite, ordner_liste, papierkorb_inhalt
 
 
@@ -129,6 +130,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._senden(200, html_typ, inhalt) if inhalt else self._weiterleiten("/personen")
         if teile.path == "/personen":
             return self._senden(200, html_typ, personen_seite(app, "alle" in q, "ignorierte" in q))
+        if teile.path == "/alben" and app.index:
+            return self._senden(200, html_typ, alben_seite(app))
         if teile.path == "/import":
             return self._senden(200, html_typ, import_seite(app))
         if teile.path == "/api/ordner":
@@ -237,6 +240,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(*jahr_aendern(app, daten))
         if pfad.startswith(("/api/import/", "/api/duplikate")):
             return self._json(*import_api(app, pfad, daten))
+        if pfad in ("/api/album", "/api/album_bild") and app.index:
+            return self._json(*album_api(app, pfad, daten))
         if pfad == "/api/lernen" and app.index:
             return self._json(200, lernen(app, "von Hand"))
         if pfad == "/api/gesichter_nennen" and app.index:

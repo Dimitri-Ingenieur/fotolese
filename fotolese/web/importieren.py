@@ -46,7 +46,7 @@ def papierkorb_inhalt(app):
 def duplikate_bereinigen(app, auftrag=None):
     """Inhaltsgleiche Dateien (SHA-256) in den Ordnern 0001–9999 auf eine reduzieren. Die übrigen kommen nach
     SORTIERT/.duplikate/<Zeit>/ (Papierkorb mit liste.csv). Behalten wird zuerst die in BestOf ausgewählte,
-    dann eine mit Ihren Labels, dann die ohne Laufindex im Namen, dann die im kleinsten Ordner.
+    dann eine mit Ihren Labels (Namen, Jahr, Alben), dann die ohne Laufindex im Namen, dann die im kleinsten Ordner.
     Geprüft werden nur Dateien gleicher Größe; Prüfsummen merkt sich der Index."""
     st = auftrag.status if auftrag else {}
     archiv = app.archiv.pfad
@@ -101,7 +101,8 @@ def duplikate_bereinigen(app, auftrag=None):
         return {"meldung": "Keine doppelten Dateien im Archiv.", "verschoben": 0}
     markiert = {(o, m) for o in {d[0] for g in gruppen for d in g} for m in app.auswahl.markiert(o)}
     gelabelt = ({r[0] for r in app.index.q("SELECT pfad FROM gesicht WHERE manuell=1 AND person IS NOT NULL "
-                                           "UNION SELECT pfad FROM jahr_manuell")} if app.index else set())
+                                           "UNION SELECT pfad FROM jahr_manuell UNION SELECT pfad FROM album_bild")}
+                if app.index else set())
 
     def rang(d, gruppe):
         o, n = d[0], d[1]
@@ -138,12 +139,16 @@ def duplikate_bereinigen(app, auftrag=None):
                 verschoben += 1
                 weg_bytes += d[2]
                 betroffen.add(d[0])
-                if app.index:  # von Hand gesetztes Jahr auf die behaltene Datei übertragen
+                if app.index:  # von Hand gesetztes Jahr und Alben auf die behaltene Datei übertragen
+                    neu_p, alt_p = f"{behalten[0]}/{url_id(behalten[1])}", f"{d[0]}/{url_id(d[1])}"
                     with app.index.lock:
-                        app.index.db.execute("INSERT OR IGNORE INTO jahr_manuell SELECT ?, jahr FROM jahr_manuell "
-                                             "WHERE pfad=?", (f"{behalten[0]}/{url_id(behalten[1])}",
-                                                              f"{d[0]}/{url_id(d[1])}"))
-                        app.index.db.commit()
+                        db = app.index.db
+                        db.execute("INSERT OR IGNORE INTO jahr_manuell SELECT ?, jahr FROM jahr_manuell WHERE pfad=?",
+                                   (neu_p, alt_p))
+                        db.execute("INSERT OR IGNORE INTO album_bild(album, pfad) SELECT album, ? FROM album_bild "
+                                   "WHERE pfad=?", (neu_p, alt_p))
+                        db.execute("DELETE FROM album_bild WHERE pfad=?", (alt_p,))
+                        db.commit()
     for o in betroffen:
         app.auswahl.bereinigen(o)
         try:

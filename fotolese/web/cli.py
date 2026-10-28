@@ -40,6 +40,12 @@ Import (Seite „Import“, braucht fotosort.py neben bestof.py):
   „Abbrechen“ stoppt nach dem laufenden Ordner, „Import rückgängig“ entfernt die Kopien des letzten Imports.
 Ordneransicht: unter jedem Foto Auflösung, Dateigröße und – falls vorhanden – Größe der NEF-Datei;
   die höchste Auflösung im Ordner ist gelb markiert.
+Alben (Seite „Alben“: anlegen, umbenennen, löschen):
+  Ein Foto kann in beliebig vielen Alben stehen; unter jedem Foto stehen seine Alben, ein Klick darauf filtert.
+  Markieren: über den Fotos „Fotos markieren für Album …“ wählen (oder „Neues Album“), dann ＋ unter den Fotos
+  (Umschalt = alle bis zum zuletzt angeklickten) oder in der Lupe Taste A; „Alle hinzufügen“ nimmt den ganzen
+  Ordner bzw. alle Treffer des Filters. Ohne gewähltes Album öffnet ＋ die Liste aller Alben zum Ankreuzen.
+  Gespeichert im Index; doppelte Dateien geben ihre Alben an die behaltene Datei weiter.
 Einstellungen und Lernen (bestof.conf neben bestof.py, wird beim ersten Start angelegt):
   NAME = Wert je Zeile; Umgebungsvariablen haben Vorrang. Jede Korrektur einer automatischen Zuordnung
   (Gesicht „Thomas“ ist in Wahrheit „Paul“) und jede Bestätigung (Schild anklicken + Enter, „Ausgewählte
@@ -50,13 +56,15 @@ Einstellungen und Lernen (bestof.conf neben bestof.py, wird beim ersten Start an
 Filter im Suchfeld, Begriffe mit Komma trennen:
   2023, Leipzig, Anna    -> Fotos aus 2023, höchstens NAEHE_KM von Leipzig, auf denen Anna ist
   Juli 2023 | 2023-07 | 0012 (Ordner) | Person 7 | ohne Jahr | Jahr korrigiert | Teil eines Dateinamens
+  Album Urlaub (oder nur Urlaub) | ohne Album   -> mehrere Alben: Fotos aus einem davon
 
 Aufruf (Conda-Umgebung von fotosort.py):
   python -m pip install opencv-python-headless   # nur für die Gesichtserkennung nötig
   python bestof.py /media/$USER/EXTERN/Sortiert
 
 Tasten im Ordner:  ← / →  voriger / nächster Ordner,  N  nächster Ordner ohne Auswahl
-Tasten in der Lupe: ← / →  Bild,  Leertaste  aus- / abwählen,  G  Gesichter zeigen,  J  Jahr ändern,  Esc  schließen
+Tasten in der Lupe: ← / →  Bild,  Leertaste  aus- / abwählen,  G  Gesichter zeigen,  J  Jahr ändern,  Esc  schließen,
+                    A  Album: ins gewählte Album aufnehmen/herausnehmen, sonst Alben zuordnen
                     (Namensschild anklicken = benennen: ganze Gruppe oder nur dieses Gesicht;
                      Gesicht fehlt = bei eingeblendeten Gesichtern ins Gesicht klicken)
 
