@@ -20,10 +20,12 @@ auch selbst aufrufen – dann müssen Sie fotosort.py nicht von Hand starten.
 - schreibt ein Protokoll; `MODUS=undo` macht einen Lauf rückgängig
 
 **bestof.py** – Weboberfläche im Browser (Paket `fotolese/web/`)
-- je Ordner bis zu 3 beste Fotos auswählen → Kopie in `Sortiert/BestOf`
+- je Ordner bis zu 3 beste Fotos mit Stern ☆ markieren → Kopie in `Sortiert/BestOf`
 - Index mit Datum, Ort und Gesichtern; Filter wie `2023, Leipzig, Anna`
 - Gesichter benennen; lernt aus Ihren Korrekturen (`bestof.conf`)
 - Alben: jedes Foto in beliebig vielen Alben, sichtbar unter dem Foto, im Filter nutzbar ([mehr](#alben))
+- „Alle Fotos“ und Jahr per Klick: das Archiv durchgehen, Alben und Jahre schnell zuordnen
+  ([mehr](#alle-fotos-und-jahr-per-klick))
 - Gesichtserkennung auf der Grafikkarte, wenn eine nutzbar ist – NVIDIA, AMD, Intel, Apple ([GPU](#gpu))
 - Seite „Import“: Ordner wählen – bestof.py startet fotosort.py, das ihn ins Archiv kopiert ([mehr](#import-im-browser))
 - doppelte Dateien im Archiv → Papierkorb `Sortiert/.duplikate`
@@ -79,7 +81,7 @@ ruft fotosort.py auf und räumt danach auf.
    immer mit `MODUS=copy` (die Quelle bleibt unverändert) und ohne Rückfrage. Fortschrittsbalken
    und Ausgabe von fotosort.py erscheinen im Browser.
 3. **Duplikate bereinigen.** Danach behält das Archiv von jedem Inhalt (SHA-256) genau eine Datei:
-   bevorzugt die in BestOf ausgewählte, dann eine mit Ihren Labels (Namen, Jahr, Alben), dann die
+   bevorzugt die mit Stern (in BestOf), dann eine mit Ihren Labels (Namen, Jahr, Alben), dann die
    ohne Laufindex. Überzählige kommen in den Papierkorb `Sortiert/.duplikate/<Zeit>/` (mit `liste.csv`),
    ihre Alben gehen auf die behaltene Datei über.
    „Papierkorb leeren“ löscht sie endgültig, „Jetzt prüfen“ bereinigt auch ohne Import.
@@ -113,6 +115,18 @@ einem davon, kombiniert mit anderem gilt beides (`Urlaub 2023, Anna`). `ohne Alb
 nirgends einsortiert ist. Auf der Seite „Alben“ lassen sich Alben umbenennen und löschen – die Fotos
 bleiben dabei im Archiv. Die Alben stehen im Index (`Sortiert/.bestof-index.sqlite3`), so wie Namen und
 Korrekturen: Wer ihn löscht, verliert sie.
+
+### Alle Fotos und Jahr per Klick
+
+„Alle Fotos“ neben „Filtern“ zeigt das ganze Archiv nach Datum, 240 Fotos je Seite, Fotos ohne Datum
+am Ende. Darüber steht dieselbe Leiste wie bei jedem Filter: Album wählen und mit ＋ einordnen, so
+lässt sich das Archiv Seite für Seite durchgehen. Nur die Fotos ohne Datum zeigt der Filter `ohne Jahr`.
+
+**Jahr per Klick:** rechts in der Leiste das Jahr eintippen, z. B. `1994`, dann „→ 1994“ unter den
+Fotos anklicken; mit Umschalt bekommen alle Fotos bis zum zuletzt angeklickten das Jahr. Das geht in
+jedem Ordner und Filterergebnis, auch in der Lupe. ✕ oder <kbd>Esc</kbd> im Jahresfeld der Leiste
+beendet es. Wie beim Jahresfeld unter dem Foto gilt das Jahr vor EXIF und Dateiname (gelb = von Hand);
+leeren + Enter im Feld unter dem Foto gibt wieder das Jahr aus der Datei.
 
 ## GPU
 
@@ -180,18 +194,18 @@ fotolese/                    Projektordner
 │   │   ├── plan.py          Zielnamen mit Laufindex, Verschiebeplan
 │   │   ├── lauf.py          verschieben, kopieren, verlinken; Protokoll; Rückgängig
 │   │   └── cli.py           main() und Hilfetext (-h)
-│   └── web/                 bestof: durchsehen, filtern, BestOf auswählen
+│   └── web/                 bestof: durchsehen, filtern, Sterne für BestOf
 │       ├── konst.py         Konstanten, Muster, Monatsnamen, Quellen der Modelle
 │       ├── konfig.py        bestof.conf lesen und schreiben, Einstellungen, Textformate
 │       ├── archiv.py        Zugriff auf den Sortiert-Ordner (Ordner, Bilder, NEF)
 │       ├── bild.py          Vorschaubilder erzeugen und zwischenspeichern
 │       ├── orte.py          GeoNames offline: GPS → nächster größerer Ort
-│       ├── auswahl.py       BestOf-Auswahl je Ordner, Kopien in BestOf
+│       ├── auswahl.py       Sterne je Ordner, Kopien in BestOf
 │       ├── alben.py         Alben: anlegen, Fotos zuordnen, für Filter und Oberfläche
 │       ├── index.py         SQLite-Index und Hintergrund-Indexer
 │       ├── gesichter.py     Gesichtserkennung (YuNet/SFace) im Prozess-Pool
 │       ├── gpu.py           Gesichtsmodelle auf der GPU: Auswahl, Prüfung, Rückfall auf CPU
-│       ├── suche.py         Suchbegriffe deuten: Jahr, Ort, Person, Ordner, Dateiname
+│       ├── suche.py         Suchbegriffe deuten: Jahr, Ort, Person, Album, Ordner, Dateiname
 │       ├── html.py          Seiten, CSS und JavaScript der Oberfläche
 │       ├── server.py        HTTP-Handler und /api-Aktionen
 │       ├── lernen.py        aus Korrekturen Schwelle und Abstand lernen

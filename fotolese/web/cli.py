@@ -1,9 +1,9 @@
 """
-bestof.py – Weboberfläche: Fotos durchsehen, filtern, je Ordner bis zu 3 beste Bilder auswählen.
+bestof.py – Weboberfläche: Fotos durchsehen, filtern, je Ordner bis zu 3 beste Bilder mit Stern markieren.
 
-Auswahl -> sofort Kopie in SORTIERT/BestOf:
-  1 Bild ausgewählt    -> 0001.jpg
-  2–3 Bilder           -> 0001a.jpg, 0001b.jpg, 0001c.jpg  (a = zuerst ausgewählt)
+Stern (☆ unter dem Bild) -> sofort Kopie in SORTIERT/BestOf:
+  1 Bild mit Stern     -> 0001.jpg
+  2–3 Bilder           -> 0001a.jpg, 0001b.jpg, 0001c.jpg  (a = zuerst markiert)
 NEF-Dateien werden nicht angezeigt – fotosort.py legt zu jedem NEF ein JPG an.
 
 Im Hintergrund entsteht ein Index (SORTIERT/.bestof-index.sqlite3):
@@ -12,8 +12,10 @@ Im Hintergrund entsteht ein Index (SORTIERT/.bestof-index.sqlite3):
 Jahr:
   Jedes Bild hat ein Jahresfeld, vorausgefüllt aus EXIF oder Dateiname. Falsch (Scan, Kamerauhr,
   WhatsApp)? Jahr eintippen, Enter. Gelb = von Hand gesetzt; leeren + Enter = wieder Jahr aus der Datei.
-  „für alle Bilder“ auf der Ordnerseite setzt das Jahr für den ganzen Ordner. Ein von Hand gesetztes Jahr
-  ersetzt auch den Monat (gilt dann als unbekannt). Gespeichert im Index, die Bilddateien bleiben unverändert.
+  „für alle Bilder“ auf der Ordnerseite setzt das Jahr für den ganzen Ordner. Viele Fotos auf einmal: oben
+  bei „Jahr per Klick“ das Jahr eintippen, dann → Jahr unter den Fotos (Umschalt = alle bis zum zuletzt
+  angeklickten). Ein von Hand gesetztes Jahr ersetzt auch den Monat (gilt dann als unbekannt). Gespeichert
+  im Index, die Bilddateien bleiben unverändert.
 Gesichter:
   Suche in zwei Stufen (GESICHT_SCORE, GEGENPROBE), kleine Gesichter mit Merkmalen aus dem Originalbild.
   Fehlt trotzdem eins (sehr klein, Profil, verdeckt)? In der Lupe Gesichter einblenden (G) und ins Gesicht
@@ -35,7 +37,7 @@ Import (Seite „Import“, braucht fotosort.py neben bestof.py):
   Ordner im Browser wählen, „In Sortiert kopieren“. fotosort.py kopiert alle Fotos samt Unterordnern (Quelle
   bleibt unverändert), sortiert ähnliche in Ordner, ergänzt passende bestehende, legt zu NEF ein JPG an.
   Inhaltsgleiche Dateien (SHA-256) kommen nur einmal ins Archiv; danach behält das Archiv von jedem Inhalt
-  genau eine Datei (bevorzugt: in BestOf ausgewählt, mit Labels, ohne Laufindex). Überzählige wandern in den
+  genau eine Datei (bevorzugt: mit Stern in BestOf, mit Labels, ohne Laufindex). Überzählige wandern in den
   Papierkorb SORTIERT/.duplikate/<Zeit>/ (mit liste.csv), „Papierkorb leeren“ löscht sie.
   „Abbrechen“ stoppt nach dem laufenden Ordner, „Import rückgängig“ entfernt die Kopien des letzten Imports.
 Ordneransicht: unter jedem Foto Auflösung, Dateigröße und – falls vorhanden – Größe der NEF-Datei;
@@ -57,13 +59,14 @@ Filter im Suchfeld, Begriffe mit Komma trennen:
   2023, Leipzig, Anna    -> Fotos aus 2023, höchstens NAEHE_KM von Leipzig, auf denen Anna ist
   Juli 2023 | 2023-07 | 0012 (Ordner) | Person 7 | ohne Jahr | Jahr korrigiert | Teil eines Dateinamens
   Album Urlaub (oder nur Urlaub) | ohne Album   -> mehrere Alben: Fotos aus einem davon
+  Alle Fotos (Knopf neben „Filtern“)            -> das ganze Archiv nach Datum, z. B. zum Einordnen
 
 Aufruf (Conda-Umgebung von fotosort.py):
   python -m pip install opencv-python-headless   # nur für die Gesichtserkennung nötig
   python bestof.py /media/$USER/EXTERN/Sortiert
 
-Tasten im Ordner:  ← / →  voriger / nächster Ordner,  N  nächster Ordner ohne Auswahl
-Tasten in der Lupe: ← / →  Bild,  Leertaste  aus- / abwählen,  G  Gesichter zeigen,  J  Jahr ändern,  Esc  schließen,
+Tasten im Ordner:  ← / →  voriger / nächster Ordner,  N  nächster Ordner ohne Stern
+Tasten in der Lupe: ← / →  Bild,  Leertaste / S  Stern,  G  Gesichter zeigen,  J  Jahr ändern,  Esc  schließen,
                     A  Album: ins gewählte Album aufnehmen/herausnehmen, sonst Alben zuordnen
                     (Namensschild anklicken = benennen: ganze Gruppe oder nur dieses Gesicht;
                      Gesicht fehlt = bei eingeblendeten Gesichtern ins Gesicht klicken)
@@ -72,7 +75,7 @@ Umgebungsvariablen (Standard in Klammern):
   PORT       (8765)
   HOST       (127.0.0.1)   0.0.0.0 = auch von Tablet/Handy im Heimnetz (dann PASSWORT setzen)
   PASSWORT   ()            Passwortschutz, Benutzername beliebig
-  MAX_BEST   (3)           höchstens so viele Bilder je Ordner
+  MAX_BEST   (3)           höchstens so viele Sterne (BestOf-Bilder) je Ordner
   BESTOF     (BestOf)      Zielordner, relativ zu SORTIERT oder absolut
   VORSCHAU   (SORTIERT/.vorschau)  Ordner für Vorschaubilder, 0 = nur Arbeitsspeicher
   GROSS      (2048)        Kantenlänge der Lupe in Pixel, 0 = Originaldatei
@@ -232,7 +235,7 @@ def main(skript_ordner=None):
     adresse = f"http://{'127.0.0.1' if lokal or host == '0.0.0.0' else host}:{port}"
     print(f"bestof {VERSION}")
     print(f"Archiv:   {archiv_pfad}  ({len(app.archiv.ordner())} Ordner, "
-          f"{bilder_text(app.auswahl.anzahl_bilder())} ausgewählt)")
+          f"{bilder_text(app.auswahl.anzahl_bilder())} mit Stern)")
     print(f"BestOf:   {bestof}")
     print(f"Vorschau: {vorschau_ordner or 'nur Arbeitsspeicher'}")
     print(f"Index:    {'aus' if not app.index else app.index.pfad + f' ({app.index_jobs} Prozesse)'}")
@@ -241,7 +244,7 @@ def main(skript_ordner=None):
           f"Lernen {'an, ab ' + str(app.lernen_ab) + ' Korrekturen' if app.lernen else 'aus'}")
     print(f"Adresse:  {adresse}" + (f"  ·  im Heimnetz: http://{lokale_ip()}:{port}" if host == "0.0.0.0" else ""))
     if not lokal and not app.passwort:
-        print("Warnung: ohne PASSWORT kann jeder im Netz die Fotos sehen und die Auswahl ändern.")
+        print("Warnung: ohne PASSWORT kann jeder im Netz die Fotos sehen und Sterne, Alben und Namen ändern.")
     print("Strg+C beendet.", flush=True)
     if app.indexer:
         app.indexer.start()

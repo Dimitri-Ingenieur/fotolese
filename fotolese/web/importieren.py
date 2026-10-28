@@ -45,7 +45,7 @@ def papierkorb_inhalt(app):
 
 def duplikate_bereinigen(app, auftrag=None):
     """Inhaltsgleiche Dateien (SHA-256) in den Ordnern 0001–9999 auf eine reduzieren. Die übrigen kommen nach
-    SORTIERT/.duplikate/<Zeit>/ (Papierkorb mit liste.csv). Behalten wird zuerst die in BestOf ausgewählte,
+    SORTIERT/.duplikate/<Zeit>/ (Papierkorb mit liste.csv). Behalten wird zuerst die mit Stern (in BestOf),
     dann eine mit Ihren Labels (Namen, Jahr, Alben), dann die ohne Laufindex im Namen, dann die im kleinsten Ordner.
     Geprüft werden nur Dateien gleicher Größe; Prüfsummen merkt sich der Index."""
     st = auftrag.status if auftrag else {}

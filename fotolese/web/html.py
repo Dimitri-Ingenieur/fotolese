@@ -10,7 +10,7 @@ import numpy as np
 from fotolese.web.konst import MONATE
 from fotolese.web.konfig import (anzeige, bilder_text, bildmasse, datum_kurz, e, groesse_text,
                                  name_aus_id, ort_text, url_id, zeit_text)
-from fotolese.web.suche import suche_ausfuehren
+from fotolese.web.suche import ALLE_FOTOS, suche_ausfuehren
 from fotolese.web.alben import alben_liste, alben_von
 from fotolese.web.index import namensliste, personen_namen
 from fotolese.web.lernen import lern_zeile
@@ -43,7 +43,8 @@ button,input{font:inherit;color:inherit}
 .knopf[disabled]{opacity:.45;cursor:default}
 .suche{display:flex;gap:6px;flex:1 1 22em;max-width:36em}
 .suche input,.springen input,.pname{padding:6px 9px;background:var(--flaeche);border:1px solid var(--linie);border-radius:2px}
-.suche input{flex:1;min-width:0}
+.suche input{flex:1;min-width:0;width:0}
+.suche .knopf{white-space:nowrap}
 .springen{display:flex;gap:6px}
 .springen input{width:6.5em;font-family:var(--zahl);font-variant-numeric:tabular-nums}
 .rechts{margin-left:auto}
@@ -58,7 +59,7 @@ button,input{font:inherit;color:inherit}
 .kachel .wann{display:block;min-height:1.2em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .kachel:not(.gewaehlt) .bild{opacity:.82}
 .kachel:hover .bild{opacity:1}
-.striche{width:30px;height:16px;margin-left:auto;stroke:var(--stift);stroke-width:2.6;stroke-linecap:round;fill:none}
+.sterne{flex:none;margin-left:auto;fill:var(--stift)}
 .seiten{display:flex;flex-wrap:wrap;gap:4px;padding:0 16px 32px}
 .seiten a,.seiten span{min-width:2.4em;text-align:center;padding:4px 8px;border:1px solid var(--linie);
   text-decoration:none;font-family:var(--zahl);font-variant-numeric:tabular-nums}
@@ -89,9 +90,11 @@ button,input{font:inherit;color:inherit}
 .lfd{font-family:var(--zahl);font-weight:700;color:var(--leise);font-variant-numeric:tabular-nums;min-width:1.6em}
 .dateiname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;font-size:13px;color:var(--leise)}
 .gewaehlt .dateiname{color:var(--text)}
-.waehlen{flex:none}
-.gewaehlt .waehlen{border-color:var(--stift);color:var(--stift)}
-.feld.voll .waehlen{opacity:.45}
+.knopf.stern{flex:none;display:inline-flex;align-items:center;justify-content:center;padding:5px 9px;color:var(--leise)}
+.stern svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linejoin:round}
+.knopf.stern:hover{color:var(--stift)}
+.gewaehlt .stern{border-color:var(--stift);color:var(--stift)}.gewaehlt .stern svg{fill:currentColor}
+.voll .stern{opacity:.45}
 .technik{width:100%;font-size:12px;color:var(--leise);font-variant-numeric:tabular-nums;white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis}
 .technik.spitze{color:var(--stift)}
@@ -103,9 +106,14 @@ button,input{font:inherit;color:inherit}
 .jahr:hover{border-color:var(--leise)}
 .jahr:placeholder-shown{border-style:dashed;font-weight:400}
 .jahr::placeholder{color:var(--leise)}
-.jahr.manuell{border-color:var(--stift);color:var(--stift)}
+.jahr.manuell,.jahr.an{border-color:var(--stift);color:var(--stift)}
+.jahr.falsch{border-color:var(--fehler);color:var(--fehler)}
 .ordnerjahr{display:flex;gap:6px;align-items:center}
-.ordnerjahr .jahr{font-size:15px;padding:5px 6px;width:4.8em}
+.ordnerjahr .jahr,.jahrwerk .jahr{font-size:15px;padding:5px 6px;width:4.8em}
+.knopf.jsetz{flex:none;padding:0 8px;border-radius:999px;font-family:var(--zahl);font-weight:700;font-size:13px;
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+.knopf.jsetz.an{border-color:var(--stift);color:var(--stift)}
+.jahrwerk{display:flex;align-items:center;gap:6px;margin-left:auto}
 .hilfe{padding:0 16px 32px;color:var(--leise);font-size:13px}
 kbd{font-family:var(--zahl);border:1px solid var(--linie);padding:0 5px;border-radius:2px}
 /* Lupe */
@@ -140,7 +148,7 @@ kbd{font-family:var(--zahl);border:1px solid var(--linie);padding:0 5px;border-r
 .lupe .wer,.lupe .info{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lupe .wer{color:var(--leise)}
 .lupe .info{font-size:13px}
-.lupe.gewaehlt .waehlen{border-color:var(--stift);color:var(--stift)}
+.lupe .knopf.jsetz{font-size:15px;padding:4px 9px}
 .gesichter-an .knopf.gz{border-color:var(--text)}
 .meldung{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--text);color:var(--umfeld);
   padding:9px 14px;border-radius:2px;max-width:min(92vw,60ch);z-index:20}
@@ -223,8 +231,8 @@ select{font:inherit;color:inherit;padding:5px 8px;background:var(--flaeche);bord
 @media (max-width:560px){
   .titel h1{font-size:48px}.raster{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}
   .bogen{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
-  .feld .waehlen{width:100%}
   .suche{flex-basis:100%;max-width:none}
+  .jahrwerk{margin-left:0}
   .albumleiste{position:static}
 }
 @media (prefers-reduced-motion:reduce){.fettstift{transition:none}}
@@ -251,39 +259,42 @@ if(statusEl&&statusEl.dataset.laeuft==='1')setTimeout(statusHolen,2000);
 JS_UEBERSICHT = """
 const nb=document.getElementById('neuaufbau');
 if(nb)nb.addEventListener('click',async()=>{
- if(!confirm('BestOf aus den gespeicherten Auswahlen neu aufbauen? Fehlende Kopien werden ergänzt, veraltete entfernt.'))return;
+ if(!confirm('BestOf aus den gespeicherten Sternen neu aufbauen? Fehlende Kopien werden ergänzt, veraltete entfernt.'))return;
  nb.disabled=true;const [ok,j]=await post('/api/neuaufbau');nb.disabled=false;
  meldung(ok?j.meldung:(j.fehler||'Neuaufbau fehlgeschlagen.'),!ok);if(ok)setTimeout(()=>location.reload(),1600);});
 """
 
 JS_BOGEN = """
 const D=JSON.parse(document.getElementById('daten').textContent);
-let laeuft=false,aktiv=-1,gesichterAn=false;
+let laeuft=false,aktiv=-1,gesichterAn=false,setzJahr=null,jahrLetzte=-1;
 const felder=[...document.querySelectorAll('.feld')],info=document.getElementById('info'),zielEl=document.getElementById('ziel');
 const lupe=document.querySelector('.lupe'),lupeImg=lupe.querySelector('img'),flaeche=lupe.querySelector('.flaeche'),
  lupeWo=lupe.querySelector('.wo'),lupeWer=lupe.querySelector('.wer'),lupeInfo=lupe.querySelector('.info'),
- lupeKnopf=lupe.querySelector('.waehlen'),lupeOrig=lupe.querySelector('.orig'),lupeKarte=lupe.querySelector('.karte'),
- gzKnopf=lupe.querySelector('.gz'),lupeJahr=D.jahr?lupe.querySelector('.jahr'):null,zusammenEl=document.getElementById('zusammen');
+ lupeKnopf=lupe.querySelector('.stern'),lupeOrig=lupe.querySelector('.orig'),lupeKarte=lupe.querySelector('.karte'),
+ gzKnopf=lupe.querySelector('.gz'),lupeJahr=D.jahr?lupe.querySelector('.jahr'):null,lupeJsetz=lupe.querySelector('.jsetz'),
+ zusammenEl=document.getElementById('zusammen');
 if(!D.jahr)lupe.querySelector('.jahr').hidden=true;
-const ABC='abcdefghijklmnopqrstuvwxyz';
+const ABC='abcdefghijklmnopqrstuvwxyz',STERNE=n=>n===1?'einen Stern':n+' Sterne';
+function sternKnopf(k,b,an,voll){k.setAttribute('aria-pressed',an);
+ k.title=an?'Stern entfernen – nimmt '+(D.ziele[b.ordner]||{})[b.id]+' aus BestOf':
+  voll?'Ordner '+b.ordner+' hat schon '+STERNE(D.max):'Mit Stern markieren – kopiert das Bild nach BestOf';}
 function zeichne(){
- felder.forEach((f,i)=>{const b=D.bilder[i],l=D.auswahl[b.ordner]||[],k=l.indexOf(b.id),an=k>=0;
-  f.classList.toggle('gewaehlt',an);f.classList.toggle('voll',!an&&l.length>=D.max);
-  f.querySelector('.buchstabe').textContent=an&&l.length>1?ABC[k]:'';
-  const w=f.querySelector('.waehlen');w.textContent=an?'Abwählen':'Auswählen';w.setAttribute('aria-pressed',an);
-  w.title=an?'Aus BestOf entfernen ('+(D.ziele[b.ordner]||{})[b.id]+')':'In BestOf kopieren';});
+ felder.forEach((f,i)=>{const b=D.bilder[i],l=D.auswahl[b.ordner]||[],k=l.indexOf(b.id),an=k>=0,voll=!an&&l.length>=D.max;
+  f.classList.toggle('gewaehlt',an);f.classList.toggle('voll',voll);
+  f.querySelector('.buchstabe').textContent=an&&l.length>1?ABC[k]:'';sternKnopf(f.querySelector('.stern'),b,an,voll);});
  if(D.einordner){const l=D.auswahl[D.ordner]||[];
-  info.textContent=D.bilder.length+(D.bilder.length===1?' Bild, ':' Bilder, ')+l.length+' von '+D.max+' ausgewählt';
-  zielEl.textContent=l.length?'BestOf: '+l.map(id=>D.ziele[D.ordner][id]).join(', '):'Noch keine Auswahl';}
+  info.textContent=D.bilder.length+(D.bilder.length===1?' Bild, ':' Bilder, ')+l.length+' von '+D.max+' mit Stern';
+  zielEl.textContent=l.length?'BestOf: '+l.map(id=>D.ziele[D.ordner][id]).join(', '):'Noch kein Stern (☆ = Kopie in BestOf)';}
  if(aktiv>=0)lupeZeichne();}
 async function umschalten(i){
  if(laeuft)return;const b=D.bilder[i],l=D.auswahl[b.ordner]||[];
- if(!l.includes(b.id)&&l.length>=D.max){meldung('Schon '+D.max+' Bilder aus Ordner '+b.ordner+' ausgewählt. Wählen Sie erst eines ab.',true);return;}
+ if(!l.includes(b.id)&&l.length>=D.max){meldung('Ordner '+b.ordner+' hat schon '+STERNE(D.max)+'. Nehmen Sie erst einem Bild den Stern.',true);return;}
  laeuft=true;const [ok,j]=await post('/api/auswahl',{ordner:b.ordner,datei:b.id});laeuft=false;
- if(!ok){meldung(j.fehler||'Auswahl fehlgeschlagen.',true);return;}
+ if(!ok){meldung(j.fehler||'Stern setzen fehlgeschlagen.',true);return;}
  D.auswahl[b.ordner]=j.auswahl;D.ziele[b.ordner]=j.ziele;zeichne();meldung(j.meldung);}
-felder.forEach((f,i)=>{f.querySelector('.waehlen').addEventListener('click',()=>umschalten(i));
- f.querySelector('.rahmen').addEventListener('click',()=>oeffne(i));});
+felder.forEach((f,i)=>{f.querySelector('.stern').addEventListener('click',()=>umschalten(i));
+ f.querySelector('.rahmen').addEventListener('click',()=>oeffne(i));
+ const k=f.querySelector('.jsetz');if(k)k.addEventListener('click',ev=>jahrKlick(i,ev.shiftKey));});
 function vorladen(i){if(i>=0&&i<D.bilder.length){const b=new Image();b.src=D.bilder[i].g;}}
 function hinweisText(b){const n=b.f.length,klick=' Ins Gesicht klicken, um es zu markieren.';
  if(b.fs==='fehler')return 'Die Datei ist nicht lesbar.';
@@ -362,7 +373,8 @@ function jahrTitel(b){return b.jm?'Jahr von Hand gesetzt'+(b.z?' (Datei: '+b.z+'
 function jahrFeld(inp,b){if(!inp)return;inp.value=b.j||'';inp.dataset.alt=inp.value;inp.classList.toggle('manuell',!!b.jm);
  inp.title=jahrTitel(b);}
 function feldMeta(i){const b=D.bilder[i],n=namenVon(b,false),f=felder[i],m=f.querySelector('.mtext');
- jahrFeld(f.querySelector('.jahr'),b);m.textContent=[b.jm?'':b.zm,b.ok].filter(Boolean).join(', ');
+ jahrFeld(f.querySelector('.jahr'),b);jsetzZeichne(f.querySelector('.jsetz'),b);
+ m.textContent=[b.jm?'':b.zm,b.ok].filter(Boolean).join(', ');
  if(n.length){if(m.textContent)m.append(' – ');const s=document.createElement('b');s.textContent=n.join(', ');m.append(s);}}
 function jahreUebernehmen(j){D.bilder.forEach((b,i)=>{const n=j.jahre[b.ordner+'/'+b.id];if(n){b.j=n[0];b.jm=n[1];feldMeta(i);}});
  if(zusammenEl&&j.zusammen!==undefined)zusammenEl.textContent=j.zusammen;if(aktiv>=0)lupeZeichne();}
@@ -373,13 +385,42 @@ async function jahrAendern(inp,i){const b=D.bilder[i],wert=inp.value.trim();if(w
  jahreUebernehmen(j);meldung(j.meldung);}
 function jahrTasten(inp){inp.addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();inp.blur();}
  else if(ev.key==='Escape'){ev.preventDefault();inp.value=inp.dataset.alt||'';inp.blur();}});}
-function lupeZeichne(){const b=D.bilder[aktiv],l=D.auswahl[b.ordner]||[],an=l.includes(b.id);
- lupe.classList.toggle('gewaehlt',an);lupeWo.textContent=(aktiv+1)+' / '+D.bilder.length;
+// Jahr per Klick: Jahr oben in der Leiste eintippen, dann „→ Jahr“ unter den Fotos (Umschalt = Bereich)
+const sjEl=document.getElementById('setzjahr'),sjAus=document.getElementById('setzjahraus'),
+ sjInfo=document.getElementById('jahrinfo'),HEUTE=new Date().getFullYear();
+function jsetzZeichne(k,b){if(!k)return;k.hidden=setzJahr===null;if(k.hidden)return;const gleich=b.j===setzJahr;
+ k.textContent=(gleich?'✓ ':'→ ')+setzJahr;k.classList.toggle('an',gleich);k.setAttribute('aria-pressed',gleich);
+ k.title=(gleich?'Hat schon das Jahr '+setzJahr:'Jahr '+setzJahr+' setzen')+' – mit Umschalt alle Fotos bis zum zuletzt angeklickten';}
+async function jahrKlick(i,bereich){if(setzJahr===null||i<0)return;const jahr=setzJahr;let von=i,bis=i;
+ if(bereich&&jahrLetzte>=0){von=Math.min(jahrLetzte,i);bis=Math.max(jahrLetzte,i);}jahrLetzte=i;
+ const pfade=D.bilder.slice(von,bis+1).filter(b=>b.j!==jahr).map(b=>b.ordner+'/'+b.id);
+ if(!pfade.length){meldung((von===bis?'Hat':'Alle haben')+' schon das Jahr '+jahr+'.');return;}
+ let j={},n=0;
+ for(let k=0;k<pfade.length;k+=1000){let ok;[ok,j]=await post('/api/jahr',{pfade:pfade.slice(k,k+1000),jahr:String(jahr)});
+  if(!ok){meldung(j.fehler||'Speichern fehlgeschlagen.',true);return;}jahreUebernehmen(j);n+=Object.keys(j.jahre).length;}
+ meldung(pfade.length>1000?'Jahr '+jahr+' für '+n+' Bilder gesetzt.':j.meldung);}
+function jahrWerkzeug(wert){if(wert===setzJahr)return;setzJahr=wert;jahrLetzte=-1;
+ try{if(wert===null)sessionStorage.removeItem('bestofJahr');else sessionStorage.setItem('bestofJahr',String(wert));}catch(_){}
+ sjAus.hidden=sjInfo.hidden=wert===null;sjEl.classList.toggle('an',wert!==null);
+ felder.forEach((f,i)=>jsetzZeichne(f.querySelector('.jsetz'),D.bilder[i]));if(aktiv>=0)lupeZeichne();}
+function jahrEingabe(){const w=sjEl.value.trim(),n=+w,gut=/^[0-9]{4}$/.test(w)&&n>=1900&&n<=HEUTE;
+ sjEl.classList.toggle('falsch',w.length===4&&!gut);jahrWerkzeug(gut?n:null);}
+if(sjEl){sjEl.addEventListener('input',jahrEingabe);
+ sjEl.addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();
+   if(sjEl.classList.contains('falsch'))meldung('Bitte ein Jahr von 1900 bis '+HEUTE+' eingeben.',true);else sjEl.blur();}
+  else if(ev.key==='Escape'){ev.preventDefault();sjEl.value='';jahrEingabe();sjEl.blur();}});
+ sjAus.addEventListener('click',()=>{sjEl.value='';jahrEingabe();sjEl.focus();});
+ let gemerkt=null;try{gemerkt=sessionStorage.getItem('bestofJahr');}catch(_){}
+ if(gemerkt){sjEl.value=gemerkt;jahrEingabe();}}
+if(lupeJsetz)lupeJsetz.addEventListener('click',ev=>jahrKlick(aktiv,ev.shiftKey));
+function lupeZeichne(){const b=D.bilder[aktiv],l=D.auswahl[b.ordner]||[],an=l.includes(b.id),voll=!an&&l.length>=D.max;
+ lupe.classList.toggle('gewaehlt',an);lupe.classList.toggle('voll',voll);lupeWo.textContent=(aktiv+1)+' / '+D.bilder.length;
  lupeWer.textContent=(D.einordner?'':'Ordner '+b.ordner+', ')+b.name+' · '+b.t+(an?' – BestOf '+D.ziele[b.ordner][b.id]:'');
  lupeInfo.textContent=[b.jm?'':b.z,b.ol,namenVon(b,true).join(', ')].filter(Boolean).join(', ');
- if(lupeJahr&&document.activeElement!==lupeJahr)jahrFeld(lupeJahr,b);lupeKarte.hidden=!b.k;if(b.k)lupeKarte.href=b.k;
+ if(lupeJahr&&document.activeElement!==lupeJahr)jahrFeld(lupeJahr,b);jsetzZeichne(lupeJsetz,b);
+ lupeKarte.hidden=!b.k;if(b.k)lupeKarte.href=b.k;
  gzKnopf.hidden=!D.gesichter;gzKnopf.textContent='Gesichter'+(b.f.length?' ('+b.f.length+')':'');
- lupeKnopf.textContent=an?'Abwählen':'Auswählen';lupeKnopf.setAttribute('aria-pressed',an);kaesten();albenLupe();}
+ sternKnopf(lupeKnopf,b,an,voll);lupeKnopf.title+=' (Leertaste oder S)';kaesten();albenLupe();}
 function oeffne(i){nbox.hidden=true;nGesicht=null;aktiv=(i+D.bilder.length)%D.bilder.length;const b=D.bilder[aktiv];
  lupeImg.src=b.g;lupeImg.alt=b.name;lupeOrig.href=b.o;lupe.hidden=false;lupeZeichne();if(gesichterAn)gesichterHolen(aktiv);
  vorladen(aktiv+1);vorladen(aktiv-1);lupe.querySelector('.zu').focus({preventScroll:true});}
@@ -402,7 +443,7 @@ document.addEventListener('keydown',ev=>{
   if(!nbox.hidden&&ev.key==='Escape'){nennenZu();ev.preventDefault();}
   else if(ev.key==='ArrowRight'){oeffne(aktiv+1);ev.preventDefault();}
   else if(ev.key==='ArrowLeft'){oeffne(aktiv-1);ev.preventDefault();}
-  else if(ev.key===' '||ev.key==='b'){umschalten(aktiv);ev.preventDefault();}
+  else if(ev.key===' '||ev.key==='s'||ev.key==='S'||ev.key==='b'){umschalten(aktiv);ev.preventDefault();}
   else if(ev.key==='g'||ev.key==='G'){gesichterAn=!gesichterAn;if(!gesichterAn)nbox.hidden=true;else gesichterHolen(aktiv);kaesten();}
   else if((ev.key==='j'||ev.key==='J')&&lupeJahr){lupeJahr.focus();lupeJahr.select();ev.preventDefault();}
   else if(ev.key==='a'||ev.key==='A'){albumTaste();ev.preventDefault();}
@@ -605,12 +646,19 @@ def stift_pfad(saat):
     return "M" + " L".join(f"{x:.1f} {y:.1f}" for x, y in punkte)
 
 
-def striche_svg(n):
+STERN_WEG = "M12 2.8 14.5 9.6 21.7 9.9 16 14.3 18 21.2 12 17.2 6 21.2 8 14.3 2.3 9.9 9.5 9.6z"
+STERN_KNOPF = (f'<button class="knopf stern" type="button" aria-pressed="false" aria-label="Stern">'
+               f'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="{STERN_WEG}"/></svg></button>')
+
+
+def sterne_svg(n):
+    """Auf der Ordnerkachel: ein kleiner Stern je Bild mit Stern (höchstens drei gezeichnet)."""
     if not n:
         return ""
-    wege = " ".join(f"M{3 + 8 * k} 14 L{8 + 8 * k} 2" for k in range(min(n, 3)))
-    return (f'<svg class="striche" viewBox="0 0 30 16" role="img" aria-label="{n} ausgewählt">'
-            f'<path d="{wege}"/></svg>')
+    k = min(n, 3)
+    wege = "".join(f'<path transform="translate({24 * i} 0)" d="{STERN_WEG}"/>' for i in range(k))
+    return (f'<svg class="sterne" width="{14 * k}" height="14" viewBox="0 0 {24 * k} 24" role="img" '
+            f'aria-label="{n} mit Stern">{wege}</svg>')
 
 
 def status_text(app):
@@ -647,7 +695,9 @@ def kopf(app, aktiv="", inhalt_titel="", suchtext=""):
     suche = ""
     if app.index:
         suche = (f'<form class="suche" action="/suche" role="search"><input name="q" value="{e(suchtext)}" '
-                 f'placeholder="Filter, z. B. 2023, Leipzig, Anna" aria-label="Filter"><button class="knopf">Filtern</button></form>')
+                 f'placeholder="Filter, z. B. 2023, Leipzig, Anna" aria-label="Filter"><button class="knopf">Filtern</button>'
+                 f'<a class="knopf" href="/suche?{urlencode({"q": ALLE_FOTOS})}" title="Alle Fotos nach Datum – '
+                 f'zum Einordnen in Alben und Jahre">{ALLE_FOTOS}</a></form>')
     return (f'<header class="kopf"><a class="archiv" href="/">{e(os.path.basename(app.archiv.pfad))}</a>'
             f'{inhalt_titel}<nav class="navi" aria-label="Bereiche">{links}</nav>{suche}'
             f'<p class="status" data-laeuft="{1 if laeuft else 0}">{e(text)}</p></header>')
@@ -712,7 +762,8 @@ def bogen_html(app, eintraege, einordner):
         kurz = ", ".join(t for t in ("" if jm is not None else monat, ort_text(ort, km)) if t)
         meta_html = e(kurz) + (f'{" – " if kurz else ""}<b>{e(", ".join(benannt))}</b>' if benannt else "")
         jahr_html = (f'<input class="jahr{" manuell" if jm is not None else ""}" value="{jahr or ""}" inputmode="numeric" '
-                     f'maxlength="4" placeholder="Jahr" aria-label="Jahr">' if app.index else "")
+                     f'maxlength="4" placeholder="Jahr" aria-label="Jahr"><button class="knopf jsetz" type="button" '
+                     f'hidden></button>' if app.index else "")
         nr = "" if einordner else f'<a class="ordnernr" href="/o/{o}" title="Ordner öffnen">{o}</a>'
         felder.append(
             f'<figure class="feld" data-id="{uid}"><div class="zelle">'
@@ -722,7 +773,7 @@ def bogen_html(app, eintraege, einordner):
             f'<path pathLength="100" d="{stift_pfad(f"{o}{name}")}"/></svg>'
             f'<span class="buchstabe" aria-hidden="true"></span>{nr}</div>'
             f'<figcaption><span class="lfd">{i + 1}</span><span class="dateiname" title="{e(name)}">{e(name)}</span>'
-            f'<button class="knopf waehlen" type="button" aria-pressed="false">Auswählen</button>'
+            f'{STERN_KNOPF}'
             f'<span class="technik{" spitze" if oben else ""}"'
             + (' title="Höchste Auflösung in diesem Ordner"' if oben else "") + f'>{e(technik)}</span>'
             f'<span class="meta">{jahr_html}<span class="mtext">{meta_html}</span></span>'
@@ -747,11 +798,12 @@ LUPE_HTML = ('<div class="lupe" hidden role="dialog" aria-label="Lupe"><div clas
              '<datalist id="namenliste"></datalist></div>'
              '<div class="leiste"><span class="wo"></span>'
              '<input class="jahr" inputmode="numeric" maxlength="4" placeholder="Jahr" aria-label="Jahr (Taste J)">'
+             '<button class="knopf jsetz" type="button" hidden></button>'
              '<span class="text"><span class="wer"></span>'
              '<span class="info"></span><span class="lalben" hidden></span></span>'
              '<button class="knopf zurueck" type="button" aria-label="Voriges Bild">‹</button>'
              '<button class="knopf vor" type="button" aria-label="Nächstes Bild">›</button>'
-             '<button class="knopf waehlen" type="button" aria-pressed="false">Auswählen</button>'
+             + STERN_KNOPF +
              '<button class="knopf almark" type="button" aria-pressed="false" title="Taste A" hidden></button>'
              '<button class="knopf alb" type="button" title="Alben zuordnen (Taste A)">Alben</button>'
              '<button class="knopf gz" type="button" title="Taste G">Gesichter</button>'
@@ -759,17 +811,54 @@ LUPE_HTML = ('<div class="lupe" hidden role="dialog" aria-label="Lupe"><div clas
              '<a class="knopf orig" target="_blank" rel="noopener">Original</a>'
              '<button class="knopf zu" type="button">Schließen</button></div></div>')
 
+# Leiste über dem Bogen: Fotos für ein Album markieren und Jahr per Klick setzen
 ALBUMLEISTE = ('<div class="albumleiste" id="albumleiste"><select id="aktalbum" aria-label="Album zum Markieren"></select>'
                '<button class="knopf" id="albumneu" type="button">Neues Album</button>'
                '<span class="leise" id="albuminfo"></span>'
                '<button class="knopf" id="albumalle" type="button" hidden></button>'
-               '<button class="knopf" id="albumraus" type="button" hidden></button></div>')
+               '<button class="knopf" id="albumraus" type="button" hidden></button>'
+               '<span class="jahrwerk"><label class="leise" for="setzjahr">Jahr per Klick</label>'
+               '<input class="jahr" id="setzjahr" inputmode="numeric" maxlength="4" placeholder="Jahr" autocomplete="off" '
+               'title="Jahr eintippen, dann unter den Fotos auf → Jahr klicken (Umschalt = alle bis zum zuletzt '
+               'angeklickten). Esc = beenden.">'
+               '<button class="link" id="setzjahraus" type="button" hidden title="Jahr per Klick beenden" '
+               'aria-label="Jahr per Klick beenden">✕</button>'
+               '<span class="leise" id="jahrinfo" hidden>→ unter den Fotos, Umschalt = Bereich</span></span></div>')
 
 ALBBOX = ('<div class="albbox" hidden role="dialog" aria-label="Alben zuordnen"><p class="atitel"></p>'
           '<div class="aliste"></div><form class="alneu"><input class="aname" maxlength="60" autocomplete="off" '
           'placeholder="Neues Album" aria-label="Neues Album anlegen und zuordnen"><button class="knopf">Anlegen</button>'
           '</form><div class="nfuss"><a class="link" href="/alben">Alben verwalten</a>'
           '<button class="link azu" type="button">Fertig</button></div></div>')
+
+
+def bogen_hilfe(app):
+    """Hilfezeile unter dem Kontaktbogen (Ordner und Filter)."""
+    text = (f'Bild anklicken zum Vergrößern. ☆ unter dem Bild = Stern: kopiert es nach BestOf (je Ordner höchstens '
+            f'{app.auswahl.max_best}). In der Lupe: <kbd>←</kbd> <kbd>→</kbd> blättern, <kbd>Leertaste</kbd> oder '
+            f'<kbd>S</kbd> Stern, ')
+    if not app.index:
+        return f'<p class="hilfe">{text}<kbd>Esc</kbd> schließen.</p>'
+    return (f'<p class="hilfe">{text}<kbd>G</kbd> Gesichter (Namensschild anklicken = benennen, fehlt eins: ins '
+            'Gesicht klicken), <kbd>J</kbd> Jahr ändern, <kbd>A</kbd> Album, <kbd>Esc</kbd> schließen. '
+            'Jahr korrigieren: ins Jahresfeld tippen, Enter; leeren = Jahr aus der Datei. Für viele Fotos: oben bei '
+            '„Jahr per Klick“ das Jahr eintippen, dann → Jahr unter den Fotos anklicken (Umschalt = Bereich). '
+            'Alben: oben ein Album wählen, dann ＋ unter den Fotos (Umschalt = Bereich); ein Album unter einem Foto '
+            'anklicken zeigt alle Fotos darin. „Alle Fotos“ oben zeigt das ganze Archiv nach Datum.</p>')
+
+
+def seiten_nav(seite_nr, seiten, link):
+    """Seitenleiste 1 … 4 5 [6] 7 8 … 20; link(n) liefert die Adresse von Seite n."""
+    if seiten <= 1:
+        return ""
+    nummern = sorted({1, seiten, *range(max(1, seite_nr - 3), min(seiten, seite_nr + 3) + 1)})
+    teile, letzte = [], 0
+    for n in nummern:
+        if n - letzte > 1:
+            teile.append("<span aria-hidden='true'>…</span>")
+        teile.append(f"<span aria-current='page'>{n}</span>" if n == seite_nr else f'<a href="{e(link(n))}">{n}</a>')
+        letzte = n
+    return f'<nav class="seiten" aria-label="Seiten">{"".join(teile)}</nav>'
 
 
 def ordner_zusammen(app, ordner):
@@ -796,7 +885,7 @@ def ordner_seite(app, ordner):
         weg.append(f'<a class="knopf" href="/o/{zurueck}" title="Taste ←">Ordner {zurueck}</a>')
     if weiter:
         weg.append(f'<a class="knopf" href="/o/{weiter}" title="Taste →">Ordner {weiter}</a>')
-    weg.append(f'<a class="knopf" href="/weiter/{ordner}" title="Taste N">Nächster ohne Auswahl</a>')
+    weg.append(f'<a class="knopf" href="/weiter/{ordner}" title="Taste N">Nächster ohne Stern</a>')
     ordnerjahr = ('<form class="ordnerjahr" id="ordnerjahr"><input class="jahr" inputmode="numeric" maxlength="4" '
                   'placeholder="Jahr" aria-label="Jahr für alle Bilder dieses Ordners" title="Jahr für alle Bilder dieses '
                   'Ordners setzen. Leer lassen = alle Korrekturen im Ordner entfernen.">'
@@ -808,12 +897,7 @@ def ordner_seite(app, ordner):
     if not bilder:
         inhalt += '<p class="leer">In diesem Ordner liegen keine JPG- oder PNG-Bilder.</p>'
     else:
-        inhalt += ((ALBUMLEISTE if app.index else "") + f'<main class="bogen">{felder}</main>'
-                   '<p class="hilfe">Bild anklicken zum Vergrößern. In der Lupe: <kbd>←</kbd> <kbd>→</kbd> blättern, '
-                   '<kbd>Leertaste</kbd> aus- oder abwählen, <kbd>G</kbd> Gesichter (Namensschild anklicken = benennen, fehlt eins: ins Gesicht klicken), <kbd>J</kbd> Jahr ändern, '
-                   '<kbd>A</kbd> Album, <kbd>Esc</kbd> schließen. Jahr korrigieren: ins Jahresfeld tippen, Enter; leeren = Jahr aus der Datei.'
-                   + (' Alben: oben ein Album wählen, dann ＋ unter den Fotos (Umschalt = Bereich); ein Album unter einem Foto '
-                      'anklicken zeigt alle Fotos darin.' if app.index else '') + '</p>')
+        inhalt += (ALBUMLEISTE if app.index else "") + f'<main class="bogen">{felder}</main>' + bogen_hilfe(app)
     inhalt += LUPE_HTML + (ALBBOX if app.index else "")
     markiert = app.auswahl.markiert(ordner)
     js = {"einordner": True, "ordner": ordner, "max": app.auswahl.max_best, "bilder": daten, "jahr": bool(app.index),
@@ -841,20 +925,20 @@ def such_seite(app, text, seite_nr):
             eintraege.append((o, name_aus_id(uid), treffer[2], treffer[1]))
     felder, daten = bogen_html(app, eintraege, einordner=False)
     chips = "".join(f'<span class="chip">{e(t)}</span>' for t in erklaerung)
-    titel = f'<div class="titel"><div><p id="info">{bilder_text(gesamt)}</p><p class="ziel" id="ziel"></p></div></div>'
+    stand = bilder_text(gesamt) + (f", Seite {seite_nr} von {seiten}" if seiten > 1 else "")
+    titel = f'<div class="titel"><div><p id="info">{stand}</p><p class="ziel" id="ziel"></p></div></div>'
     inhalt = kopf(app, "", titel, text)
     if erklaerung:
         inhalt += f'<div class="filter" aria-label="Erkannter Filter">{chips}</div>'
     if not text.strip():
-        inhalt += '<p class="leer">Geben Sie Begriffe mit Komma getrennt ein, z. B. 2023, Leipzig, Anna.</p>'
+        inhalt += ('<p class="leer">Geben Sie Begriffe mit Komma getrennt ein, z. B. 2023, Leipzig, Anna – '
+                   'oder „Alle Fotos“ für das ganze Archiv.</p>')
     elif not eintraege:
         inhalt += '<p class="leer">Keine Fotos passen zu allen Begriffen. Entfernen Sie einen Begriff oder prüfen Sie die Schreibweise.</p>'
     else:
-        inhalt += (ALBUMLEISTE if app.index else "") + f'<main class="bogen">{felder}</main>'
-        if seiten > 1:
-            teile = [f"<span aria-current='page'>{n}</span>" if n == seite_nr else
-                     f'<a href="/suche?{urlencode({"q": text, "seite": n})}">{n}</a>' for n in range(1, seiten + 1)]
-            inhalt += f'<nav class="seiten" aria-label="Seiten">{"".join(teile)}</nav>'
+        inhalt += ((ALBUMLEISTE if app.index else "") + f'<main class="bogen">{felder}</main>'
+                   + seiten_nav(seite_nr, seiten, lambda n: "/suche?" + urlencode({"q": text, "seite": n}))
+                   + bogen_hilfe(app))
     inhalt += LUPE_HTML + (ALBBOX if app.index else "")
     ordner_menge = sorted({o for o, *_ in eintraege})
     js = {"einordner": False, "max": app.auswahl.max_best, "bilder": daten, "jahr": bool(app.index),
@@ -1062,7 +1146,7 @@ def uebersicht(app, filt, seite_nr):
         wann = ", ".join(t for t in zusammen.get(o, []) if t)
         kacheln.append(f'<a class="kachel{" gewaehlt" if markiert else ""}" href="/o/{o}">'
                        f'<div class="bild">{bild}</div><div class="zeile"><span class="nr">{o}</span>'
-                       f'<span class="leise">{bilder_text(len(bilder))}</span>{striche_svg(len(markiert))}</div>'
+                       f'<span class="leise">{bilder_text(len(bilder))}</span>{sterne_svg(len(markiert))}</div>'
                        f'<span class="leise wann">{e(wann)}</span></a>')
     n_mit = len(gewaehlt & set(alle))
 
@@ -1070,10 +1154,10 @@ def uebersicht(app, filt, seite_nr):
         aktuell = ' aria-current="page"' if schluessel == filt else ""
         return f'<a href="/?filter={schluessel}"{aktuell}>{text} ({n})</a>'
 
-    titel = (f'<p class="stand">{len(alle)} Ordner, {n_mit} mit Auswahl, '
+    titel = (f'<p class="stand">{len(alle)} Ordner, {n_mit} mit Stern, '
              f'{bilder_text(app.auswahl.anzahl_bilder())} in BestOf</p>')
     werkzeuge = (f'<div class="filter"><nav class="navi" aria-label="Ordnerfilter">{filterlink("alle", "Alle", len(alle))}'
-                 f'{filterlink("ohne", "Ohne Auswahl", len(alle) - n_mit)}{filterlink("mit", "Mit Auswahl", n_mit)}</nav>'
+                 f'{filterlink("ohne", "Ohne Stern", len(alle) - n_mit)}{filterlink("mit", "Mit Stern", n_mit)}</nav>'
                  f'<form class="springen" action="/springen"><input name="o" inputmode="numeric" pattern="[0-9]*" '
                  f'maxlength="4" placeholder="Ordner" aria-label="Ordnernummer"><button class="knopf">Öffnen</button></form>'
                  f'<button class="knopf rechts" id="neuaufbau" type="button">BestOf neu aufbauen</button></div>')
@@ -1081,22 +1165,12 @@ def uebersicht(app, filt, seite_nr):
         hauptteil = (f'<p class="leer">Keine Ordner 0001–9999 gefunden in {e(app.archiv.pfad)}. '
                      f'Prüfen Sie den Pfad beim Start.</p>')
     elif not liste:
-        hauptteil = '<p class="leer">Alle Ordner haben eine Auswahl.</p>' if filt == "ohne" else \
-            '<p class="leer">Noch keine Auswahl. Öffnen Sie einen Ordner und wählen Sie bis zu ' \
-            f'{app.auswahl.max_best} Bilder aus.</p>'
+        hauptteil = '<p class="leer">Jeder Ordner hat ein Bild mit Stern.</p>' if filt == "ohne" else \
+            '<p class="leer">Noch keine Sterne. Öffnen Sie einen Ordner und markieren Sie bis zu ' \
+            f'{bilder_text(app.auswahl.max_best)} mit ☆ – sie landen in BestOf.</p>'
     else:
         hauptteil = f'<main class="raster">{"".join(kacheln)}</main>'
-    nav = ""
-    if seiten > 1:
-        nummern = sorted({1, seiten, *range(max(1, seite_nr - 3), min(seiten, seite_nr + 3) + 1)})
-        teile, letzte = [], 0
-        for n in nummern:
-            if n - letzte > 1:
-                teile.append("<span aria-hidden='true'>…</span>")
-            teile.append(f"<span aria-current='page'>{n}</span>" if n == seite_nr
-                         else f'<a href="/?filter={filt}&seite={n}">{n}</a>')
-            letzte = n
-        nav = f'<nav class="seiten" aria-label="Seiten">{"".join(teile)}</nav>'
+    nav = seiten_nav(seite_nr, seiten, lambda n: f"/?filter={filt}&seite={n}")
     quelle = ('<p class="quelle">Ortsnamen: GeoNames (CC BY 4.0). Gesichtserkennung lokal mit YuNet und SFace '
               '(OpenCV Zoo).</p>' if app.index else "")
     return seite("BestOf – " + os.path.basename(app.archiv.pfad),

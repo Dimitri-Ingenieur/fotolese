@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """bestof.py – Starter.
 
-Weboberfläche zum Durchsehen, Filtern und Auswählen der besten Fotos je Ordner.
+Weboberfläche zum Durchsehen und Filtern; die besten Fotos je Ordner bekommen einen Stern.
 Die Funktionalität liegt im Paket fotolese.web; die vollständige Hilfe zeigt
     python bestof.py -h
 

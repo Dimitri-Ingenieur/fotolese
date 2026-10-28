@@ -4,10 +4,13 @@ import re
 from fotolese.web.konst import MONAT_NR, MONATE
 from fotolese.web.konfig import km_zwischen, name_aus_id
 
+ALLE_FOTOS = "Alle Fotos"  # Knopf neben „Filtern“: das ganze Archiv nach Datum
+
 
 def suche_ausfuehren(app, text):
     """Begriffe mit Komma trennen. Gleiche Art = ODER (2022, 2023; Leipzig, Dresden; zwei Alben),
-    verschiedene Arten = UND (2023, Juli, Leipzig), Personen immer UND (Anna, Ben = beide drauf)."""
+    verschiedene Arten = UND (2023, Juli, Leipzig), Personen immer UND (Anna, Ben = beide drauf).
+    „Alle Fotos“ schränkt nichts ein."""
     jahre, monate, jahr_monat, ordner, orte, personen, texte, erklaerung = set(), set(), set(), set(), [], [], [], []
     namen, anzeige_name, sonder, alben, album_ids = {}, {}, set(), {}, set()
     if app.index:
@@ -19,6 +22,10 @@ def suche_ausfuehren(app, text):
 
     def deuten(t, nur_pruefen=False):
         k = re.sub(r"\s+", " ", t.casefold())
+        if k in ("alle fotos", "alle bilder", "alle", "alles"):
+            if not nur_pruefen:
+                erklaerung.append("alle Fotos")
+            return True
         if k in ("ohne jahr", "kein jahr", "jahr fehlt"):
             if not nur_pruefen:
                 sonder.add("ohne_jahr")

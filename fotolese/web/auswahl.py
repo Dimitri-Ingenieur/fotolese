@@ -1,4 +1,4 @@
-"""fotolese.web.auswahl – BestOf-Auswahl je Ordner lesen/schreiben und Kopien in BestOf abgleichen."""
+"""fotolese.web.auswahl – Sterne (BestOf-Auswahl) je Ordner lesen/schreiben und Kopien in BestOf abgleichen."""
 import json
 import os
 import shutil
@@ -118,8 +118,8 @@ class Auswahl:
             if name in alt:
                 neu = [m for m in alt if m != name]
             elif len(alt) >= self.max_best:
-                return 409, {"fehler": f"Schon {self.max_best} Bilder aus Ordner {ordner} ausgewählt. "
-                                       f"Wählen Sie erst eines ab."}
+                sterne = "einen Stern" if self.max_best == 1 else f"{self.max_best} Sterne"
+                return 409, {"fehler": f"Ordner {ordner} hat schon {sterne}. Nehmen Sie erst einem Bild den Stern."}
             else:
                 neu = alt + [name]
             try:
@@ -131,14 +131,14 @@ class Auswahl:
                 except OSError:
                     pass
                 grund = fehler.strerror or str(fehler)
-                return 500, {"fehler": f"Kopieren nach BestOf fehlgeschlagen: {grund}. Auswahl unverändert."}
+                return 500, {"fehler": f"Kopieren nach BestOf fehlgeschlagen: {grund}. Sterne unverändert."}
             ziele = self.ziele(ordner, markiert)
             if name in markiert:
-                meldung = f"Als {ziele[name]} in BestOf kopiert."
+                meldung = f"Stern gesetzt – als {ziele[name]} in BestOf kopiert."
             elif markiert:
-                meldung = "Abgewählt. In BestOf: " + ", ".join(ziele[m] for m in markiert) + "."
+                meldung = "Stern entfernt. In BestOf: " + ", ".join(ziele[m] for m in markiert) + "."
             else:
-                meldung = "Abgewählt. Aus diesem Ordner liegt nichts mehr in BestOf."
+                meldung = "Stern entfernt. Aus diesem Ordner liegt nichts mehr in BestOf."
             return 200, {"auswahl": [url_id(m) for m in markiert],
                          "ziele": {url_id(m): z for m, z in ziele.items()}, "meldung": meldung}
 
