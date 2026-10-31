@@ -182,6 +182,10 @@ class Handler(BaseHTTPRequestHandler):
             m = meta.get(f"{o}/{uid}")
             stand = "fehler" if m and m[8] else ("offen" if not m or m[7] is None else "ok")
             return self._json(200, {"f": gesichter.get(f"{o}/{uid}", []), "fs": stand})
+        if teile.path == "/api/verbessern":
+            if not app.verbesserer:
+                return self._json(404, {"fehler": "Verbessern ist aus (COMFYUI = 0)."})
+            return self._json(200, {"auftraege": app.verbesserer.stand(q.get("id", [])[:20])})
         if teile.path == "/api/status":
             text, laeuft = status_text(app)
             return self._json(200, {"text": text, "laeuft": laeuft})
@@ -263,6 +267,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(code, antwort)
         if pfad == "/api/neuaufbau":
             return self._json(200, app.auswahl.neu_aufbauen())
+        if pfad == "/api/verbessern":
+            if not app.verbesserer:
+                return self._json(404, {"fehler": "Verbessern ist aus (COMFYUI = 0 in bestof.conf)."})
+            return self._json(*app.verbesserer.starten(daten.get("pfad"), str(daten.get("workflow") or "")))
         if pfad == "/api/papierkorb":
             return self._json(*papierkorb_api(app, daten))
         if pfad == "/api/person" and app.index:

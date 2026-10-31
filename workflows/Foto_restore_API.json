@@ -1,0 +1,376 @@
+{
+  "1": {
+    "inputs": {
+      "note": "{\"v\": 1, \"title\": \"Qwen Image 2.1 Restore\", \"subtitle\": \"Load a small, soft or worn picture. Qwen Image 2.1 redraws it sharp at about 2 megapixels with my Restore LoRA.\", \"author\": \"AusBoss\", \"layout\": \"card\", \"accent\": \"\", \"body\": \"1. Load your image. You can crop it right there with the blue handles.\\n2. Press **Run**.\\n3. Slide **Before and after** to compare. The result is saved as a PNG.\\n\\n### Switches\\n\\n- **Fast** on: 8 steps with the Viggle Turbo LoRA. Off: 25 steps without it, closer to your picture and softer, about twice as long.\\n\\n### Tips\\n\\n- **Blurry photo (out of focus, shaky, a frame from a video)? Lower the Restore LoRA to 0.5.** At 1.0 it stays true to the blur and the result comes back soft.\\n- Strength is a dial: 1.0 is the softest and stays truest to your picture. Lower it for more of Qwen's own texture.\\n- It is a redraw. Fine detail is made up to fit, so a face stays the same person, not the same pixels.\\n- Small faces are redrawn, so a face far from the camera can come back as a slightly different person.\\n- Small lettering on signs and labels can come back misspelled.\\n- For a result over 2 megapixels, use my tiled workflow, Qwen Image 2.1 Tiled Upscale.\\n- If the run stops at a red **LoRA Loader**, a LoRA that is switched on is missing. Download it from the list below.\\n\\nNeeds ComfyUI 0.38 or newer and AusBoss nodes 2.8.0 or newer (update first).\", \"models\": [{\"name\": \"qwen_image_2.1_int8_convrot.safetensors\", \"dir\": \"diffusion_models\", \"size\": \"7.26 GB\", \"url\": \"https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/diffusion_models/qwen_image_2.1_int8_convrot.safetensors\", \"note\": \"\"}, {\"name\": \"qwen3vl_8b_int8_convrot.safetensors\", \"dir\": \"text_encoders\", \"size\": \"9.35 GB\", \"url\": \"https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/text_encoders/qwen3vl_8b_int8_convrot.safetensors\", \"note\": \"\"}, {\"name\": \"qwen_image_2.1_vae_bf16.safetensors\", \"dir\": \"vae\", \"size\": \"676 MB\", \"url\": \"https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/vae/qwen_image_2.1_vae_bf16.safetensors\", \"note\": \"\"}, {\"name\": \"qwen-image-2.1-restore.safetensors\", \"dir\": \"loras\", \"size\": \"159 MB\", \"url\": \"https://huggingface.co/ausboss/Qwen-Image-2.1-Restore-LoRA/resolve/main/qwen-image-2.1-restore.safetensors\", \"note\": \"keeps the result close to your picture\"}, {\"name\": \"Qwen-Image-2.1-viggle-turbo-v0.3-6step-lora-r128.safetensors\", \"dir\": \"loras\", \"size\": \"680 MB\", \"url\": \"https://huggingface.co/Viggle/Qwen-Image-2.1-viggle-turbo/resolve/main/Qwen-Image-2.1-viggle-turbo-v0.3-6step-lora-r128.safetensors\", \"note\": \"for Fast on · Qwen Research License, research use\"}], \"packs\": [{\"name\": \"ComfyUI-AusBoss\", \"url\": \"https://github.com/ausboss/ComfyUI-AusBoss\", \"node\": \"AUSBOSS_NODES_Callout\"}], \"links\": [{\"label\": \"GitHub · ausboss\", \"url\": \"https://github.com/ausboss\"}, {\"label\": \"Civitai · AusBoss\", \"url\": \"https://civitai.com/user/AusBoss\"}, {\"label\": \"X · Zanzibased\", \"url\": \"https://x.com/Zanzibased\"}]}"
+    },
+    "class_type": "AUSBOSS_NODES_WorkflowNote",
+    "_meta": {
+      "title": "🆎 AusBoss",
+      "cnr_id": "ausboss-nodes",
+      "ver": "2.8.0"
+    }
+  },
+  "2": {
+    "inputs": {
+      "image": "DSC_0053.JPG",
+      "rotation_degrees": 0,
+      "crop_aspect_ratio": "free",
+      "crop_x": 0,
+      "crop_y": 0,
+      "crop_width": 0,
+      "crop_height": 0,
+      "pad_left": 0,
+      "pad_top": 0,
+      "pad_right": 0,
+      "pad_bottom": 0,
+      "feather": 24,
+      "canvas_multiple": 1,
+      "fill_color": "#808080",
+      "resize_to_megapixels": false,
+      "megapixels": 1,
+      "resize_method": "lanczos",
+      "resolution_steps": 1,
+      "stitch_blend": 32,
+      "stitch_grow": 0,
+      "painted_area": "fill"
+    },
+    "class_type": "AUSBOSS_NODES_ImageCropRotatePad",
+    "_meta": {
+      "title": "Image Crop + Rotate + Pad - Your picture",
+      "cnr_id": "ausboss-nodes",
+      "ver": "2.8.0"
+    }
+  },
+  "3": {
+    "inputs": {
+      "text": "Restore the photo: remove blur, noise and compression artifacts and recover sharp, natural detail, keeping the same composition, people and colors."
+    },
+    "class_type": "AUSBOSS_NODES_Text",
+    "_meta": {
+      "title": "Text - The request",
+      "cnr_id": "ausboss-nodes",
+      "ver": "2.8.0"
+    }
+  },
+  "4": {
+    "inputs": {
+      "seed": 179301538961855
+    },
+    "class_type": "AUSBOSS_NODES_Seed",
+    "_meta": {
+      "title": "Seed",
+      "cnr_id": "ausboss-nodes",
+      "ver": "2.8.0"
+    }
+  },
+  "5": {
+    "inputs": {
+      "value": 8
+    },
+    "class_type": "AUSBOSS_NODES_Integer",
+    "_meta": {
+      "title": "Integer - Steps",
+      "cnr_id": "ausboss-nodes",
+      "ver": "2.8.0"
+    }
+  },
+  "6": {
+    "inputs": {
+      "clip_name": "qwen3vl_8b_int8_convrot.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Text encoder",
+      "cnr_id": "comfy-core",
+      "ver": "0.38.0"
+    }
+  },
+  "7": {
+    "inputs": {
+      "vae_name": "qwen_image_2.1_vae_bf16.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "VAE",
+      "cnr_id": "comfy-core",
+      "ver": "0.38.0"
+    }
+  },
+  "8": {
+    "inputs": {
+      "unet_name": "qwen_image_2.1_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Diffusion model",
+      "cnr_id": "comfy-core",
+      "ver": "0.38.0"
+    }
+  },
+  "9": {
+    "inputs": {
+      "loras": "[{\"id\":\"rmvws0q7z3\",\"name\":\"qwen-image-2.1-restore.safetensors\",\"strength\":1,\"strength_clip\":1,\"enabled\":true,\"triggers\":\"\"},{\"id\":\"rmvws0q7z4\",\"name\":\"Qwen-Image-2.1-viggle-turbo-v0.3-6step-lora-r256.safetensors\",\"strength\":1,\"strength_clip\":1,\"enabled\":true,\"triggers\":\"\"}]",
+      "trigger_separator": ", ",
+      "on_missing": "error",
+      "model": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "AUSBOSS_NODES_LoraLoader",
+    "_meta": {
+      "title": "LoRA Loader - Restore LoRA",
+      "cnr_id": "ausboss-nodes",
+      "ver": "2.8.0"
+    }
+  },
+  "11": {
+    "inputs": {
+      "image_a": [
+        "2",
+        0
+      ],
+      "image_b": [
+        "23:22",
+        0
+      ]
+    },
+    "class_type": "AUSBOSS_NODES_Compare",
+    "_meta": {
+      "title": "Image Compare A/B - Before and after",
+      "cnr_id": "ausboss-nodes",
+      "ver": "2.8.0"
+    }
+  },
+  "12": {
+    "inputs": {
+      "filename_prefix": "image",
+      "format": "png",
+      "save_metadata": true,
+      "exact_name": "",
+      "on_existing": "overwrite",
+      "output_dir": "",
+      "caption": "",
+      "name_counter": true,
+      "name_date": false,
+      "name_time": false,
+      "name_size": false,
+      "name_batch": false,
+      "preview": true,
+      "step_preview": false,
+      "images": [
+        "23:22",
+        0
+      ]
+    },
+    "class_type": "AUSBOSS_NODES_SaveImage",
+    "_meta": {
+      "title": "Save Image",
+      "cnr_id": "ausboss-nodes",
+      "ver": "2.8.0"
+    }
+  },
+  "13": {
+    "inputs": {},
+    "class_type": "AUSBOSS_NODES_RunTimer",
+    "_meta": {
+      "title": "Run Timer",
+      "cnr_id": "ausboss-nodes",
+      "ver": "2.8.0"
+    }
+  },
+  "24": {
+    "inputs": {
+      "text": "⬇️#2 Load your picture here.\n\nOptional: drag the blue handles to crop it first."
+    },
+    "class_type": "AUSBOSS_NODES_Callout",
+    "_meta": {
+      "title": "Callout",
+      "cnr_id": "ausboss-nodes",
+      "ver": "2.8.0"
+    }
+  },
+  "25": {
+    "inputs": {
+      "text": "⬇️#14 Click **Fast** to toggle fast mode."
+    },
+    "class_type": "AUSBOSS_NODES_Callout",
+    "_meta": {
+      "title": "Callout",
+      "cnr_id": "ausboss-nodes",
+      "ver": "2.8.0"
+    }
+  },
+  "27": {
+    "inputs": {
+      "text": "One box does the work: Qwen reads the request and redraws your picture.\n\nDouble-click it to see inside."
+    },
+    "class_type": "AUSBOSS_NODES_Callout",
+    "_meta": {
+      "title": "Callout",
+      "cnr_id": "ausboss-nodes",
+      "ver": "2.8.0"
+    }
+  },
+  "28": {
+    "inputs": {
+      "text": "⬇️#9 Blurry photo? Set the first row to **0.5**."
+    },
+    "class_type": "AUSBOSS_NODES_Callout",
+    "_meta": {
+      "title": "Callout",
+      "cnr_id": "ausboss-nodes",
+      "ver": "2.8.0"
+    }
+  },
+  "23:16": {
+    "inputs": {
+      "prompt": [
+        "3",
+        0
+      ],
+      "negative_prompt": "",
+      "resolution": 0,
+      "clip": [
+        "6",
+        0
+      ],
+      "images.image_1": [
+        "2",
+        0
+      ],
+      "vae": [
+        "7",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImage21",
+    "_meta": {
+      "title": "Text Encode Qwen Image 2.1 - Your picture and the request",
+      "cnr_id": "comfy-core",
+      "ver": "0.38.0"
+    }
+  },
+  "23:17": {
+    "inputs": {
+      "device": "auto",
+      "dtype": "default",
+      "model": [
+        "9",
+        0
+      ]
+    },
+    "class_type": "QwenImage21Cache",
+    "_meta": {
+      "title": "Reference cache",
+      "cnr_id": "comfy-core",
+      "ver": "0.38.0"
+    }
+  },
+  "23:20": {
+    "inputs": {
+      "seed": [
+        "4",
+        0
+      ],
+      "steps": [
+        "5",
+        0
+      ],
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "23:17",
+        0
+      ],
+      "positive": [
+        "23:16",
+        0
+      ],
+      "negative": [
+        "23:16",
+        1
+      ],
+      "latent_image": [
+        "23:16",
+        2
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "Sampler - CFG 1, euler",
+      "cnr_id": "comfy-core",
+      "ver": "0.38.0"
+    }
+  },
+  "23:21": {
+    "inputs": {
+      "samples": [
+        "23:20",
+        0
+      ],
+      "vae": [
+        "7",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "Decode",
+      "cnr_id": "comfy-core",
+      "ver": "0.38.0"
+    }
+  },
+  "23:22": {
+    "inputs": {
+      "image": [
+        "23:21",
+        0
+      ]
+    },
+    "class_type": "SplitImageWithAlpha",
+    "_meta": {
+      "title": "Split Image with Alpha - Drop the see-through channel",
+      "cnr_id": "comfy-core",
+      "ver": "0.38.0"
+    }
+  },
+  "23:31": {
+    "inputs": {
+      "text": "Qwen reads your picture at its own size, together with the request. The same node sets the size of the result."
+    },
+    "class_type": "AUSBOSS_NODES_Callout",
+    "_meta": {
+      "title": "Callout",
+      "cnr_id": "ausboss-nodes",
+      "ver": "2.8.0"
+    }
+  },
+  "23:32": {
+    "inputs": {
+      "text": "Steps and seed come from the top level, CFG 1. The Restore LoRA is on the model, so the result stays close to your picture."
+    },
+    "class_type": "AUSBOSS_NODES_Callout",
+    "_meta": {
+      "title": "Callout",
+      "cnr_id": "ausboss-nodes",
+      "ver": "2.8.0"
+    }
+  },
+  "23:33": {
+    "inputs": {
+      "text": "Qwen's VAE returns a see-through channel too. It is dropped here, so the saved PNG is a plain picture."
+    },
+    "class_type": "AUSBOSS_NODES_Callout",
+    "_meta": {
+      "title": "Callout",
+      "cnr_id": "ausboss-nodes",
+      "ver": "2.8.0"
+    }
+  }
+}

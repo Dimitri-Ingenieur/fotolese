@@ -2,7 +2,8 @@
 
 Endgültig gelöscht wird über die Weboberfläche nie: Der Papierkorb ist ein gewöhnlicher Ordner, den man bei
 Bedarf im Dateimanager leert. Ein Foto wandert samt NEF und Begleitdateien (.xmp, .pp3) nach
-Musor/<Ordner>/; Musor/liste.csv vermerkt, woher es kam. Fotos mit Stern lassen sich nicht wegwerfen –
+Musor/<Ordner>/ (eine verbesserte Fassung nach Musor/<Ordner>/verbessert/); Musor/liste.csv vermerkt,
+woher es kam. Fotos mit Stern lassen sich nicht wegwerfen –
 erst den Stern entfernen. Die Einträge im Index räumt der Indexer beim nächsten Durchlauf auf; bis dahin
 bleiben Namen, Jahr und Alben stehen, so dass „Rückgängig“ alles zurückbringt.
 """
@@ -64,6 +65,7 @@ def _freie_namen(ziel, namen, stamm):
 def _bewegen(quelle, ziel):
     if os.path.lexists(ziel):  # os.rename würde unter Linux stillschweigend überschreiben
         raise OSError(errno.EEXIST, "Ziel existiert schon", ziel)
+    os.makedirs(os.path.dirname(ziel), exist_ok=True)  # verbesserte Fassungen: …/verbessert/<Datei>
     try:
         os.rename(quelle, ziel)
     except OSError as fehler:

@@ -9,6 +9,7 @@ BILD_EXT = {".jpg", ".jpeg", ".png"}
 ORDNER_MUSTER = re.compile(r"\d{4}")
 BESTOF_MUSTER = re.compile(r"(\d{4})([a-z]?)\.(jpg|png)")
 PAPIERKORB = "Musor"  # Unterordner von SORTIERT; fotosort und bestof lesen nur Ordner 0001–9999
+VERBESSERT = "verbessert"  # Unterordner eines Ordners 0001–9999 für die mit ComfyUI verbesserten Fassungen
 BUCHSTABEN = "abcdefghijklmnopqrstuvwxyz"
 THUMB = 480
 MONATE = ["", "Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September",

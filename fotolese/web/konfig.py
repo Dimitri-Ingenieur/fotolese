@@ -43,6 +43,10 @@ LERNEN_AB = 5            # neu lernen nach so vielen korrigierten Fehlzuordnunge
 # GPU = auto             # auto = GPU, wenn eine nutzbar ist; 0 = nur CPU; oder z. B. cuda, opencl
 # GPU_JOBS = 2           # so viele Index-Prozesse rechnen auf der GPU, die übrigen auf der CPU
 
+# ---- Verbessern mit ComfyUI – siehe README (Abschnitt Verbessern) ----
+# COMFYUI = http://127.0.0.1:8188   # 0 = Knopf „Verbessern“ aus
+# WORKFLOWS = /pfad/zu/workflows      # Standard: workflows neben bestof.py; Workflows im API-Format
+
 # ---- Import ----
 # IMPORT = 1             # 0 = Seite „Import“ aus; importieren geht nur an diesem Rechner, nie aus dem Heimnetz
 # IMPORT_JOBS = 4        # parallele Prozesse für fotosort; Standard: Hälfte der Kerne

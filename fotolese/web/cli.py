@@ -46,6 +46,12 @@ Papierkorb (Eimer unter jedem Foto, in der Lupe Taste Entf):
   Das Foto wandert samt NEF und Begleitdateien (.xmp, .pp3) nach SORTIERT/Musor/<Ordner>/, Musor/liste.csv
   vermerkt die Herkunft. „Rückgängig“ bzw. „Zurückholen“ legt es zurück. Fotos mit Stern bleiben (erst den
   Stern entfernen). Endgültig löschen geht über die Weboberfläche nie – den Papierkorb leert man im Dateimanager.
+Verbessern (ComfyUI, z. B. auf demselben Rechner, Port 8188):
+  In der Lupe Workflow wählen und „✦ Verbessern“: bestof lädt das Foto zu ComfyUI, wartet und legt das Ergebnis
+  verlustfrei als SORTIERT/<Ordner>/verbessert/<Name>_<Workflow>.png ab – mit Datum und Ort des Originals, das
+  Original bleibt. Danach zeigt der Schieber Vorher/Nachher (Taste V); nach dem Neuladen steht die Fassung als
+  eigene Kachel hinter dem Original und lässt sich wie jedes Foto mit Stern markieren. Workflows: in ComfyUI mit
+  „Export (API)“ speichern und in den Ordner workflows neben bestof.py legen (WORKFLOWS); jede Datei = eine Wahl.
 Heimnetz:
   bestof.py lauscht auf allen Netzwerken: vom Tablet, Handy oder anderen Rechner http://<Rechnername>:8765,
   z. B. http://tigris:8765 (Name und IP stehen in der Startausgabe). Alles geht von dort – außer Importieren.
@@ -77,7 +83,7 @@ Aufruf (Conda-Umgebung von fotosort.py):
 
 Tasten im Ordner:  ← / →  voriger / nächster Ordner,  N  nächster Ordner ohne Stern
 Tasten in der Lupe: ← / →  Bild,  Leertaste / S  Stern,  Entf  Papierkorb,  G  Gesichter zeigen,  J  Jahr ändern,
-                    Esc  schließen,
+                    V  Vorher/Nachher (verbesserte Fassung),  Esc  schließen,
                     A  Album: ins gewählte Album aufnehmen/herausnehmen, sonst Alben zuordnen
                     (Namensschild anklicken = benennen: ganze Gruppe oder nur dieses Gesicht;
                      Gesicht fehlt = bei eingeblendeten Gesichtern ins Gesicht klicken)
@@ -109,6 +115,8 @@ Umgebungsvariablen (Standard in Klammern):
   IMPORT     (1)           0 = Seite „Import“ aus; sonst nur an diesem Rechner (nie aus dem Heimnetz)
   IMPORT_JOBS (Kerne/2)    parallele Prozesse für fotosort beim Import (HDD/USB: z. B. 2–4)
   FOTOSORT   (fotosort.py neben bestof.py)
+  COMFYUI    (http://127.0.0.1:8188)  ComfyUI für „Verbessern“; 0 = aus
+  WORKFLOWS  (workflows neben bestof.py)  Ordner mit Workflows im API-Format (ComfyUI: Export (API))
   NACHZIEHEN (0.50)        beim Korrigieren eines Gesichts wandern Gesichter derselben Gruppe mit, die ihm
                            mindestens so ähnlich sind und ihm ähnlicher als dem Rest der Gruppe; 1 = aus
   ERKENN_PX  (1920)        Bildgröße für die Gesichtssuche (größer = findet kleinere Gesichter, langsamer);
@@ -145,6 +153,7 @@ from fotolese.web.bild import Vorschau
 from fotolese.web.index import Index, Indexer
 from fotolese.web.lernen import Lerner
 from fotolese.web.server import App, Handler
+from fotolese.web.verbessern import Verbesserer
 
 
 class Server(ThreadingHTTPServer):
@@ -256,6 +265,9 @@ def main(skript_ordner=None):
     app.sucher = None
     app.aktualisieren = max(30, _env("AKTUALISIEREN", 300, int))
     app.daten = os.path.abspath(os.path.expanduser(_env("DATEN", "~/.cache/fotosort")))
+    comfyui = _env("COMFYUI", "http://127.0.0.1:8188")
+    workflow_ordner = os.path.abspath(os.path.expanduser(_env("WORKFLOWS", os.path.join(basis, "workflows"))))
+    app.verbesserer = None if comfyui == "0" else Verbesserer(app, comfyui, workflow_ordner)
     app.index, app.indexer = None, None
     if _env("INDEX", "1") != "0":
         try:
@@ -290,6 +302,14 @@ def main(skript_ordner=None):
     print(f"Einstellungen: {konfig.KONFIG.pfad} – Personen: Schwelle {app.person_schwelle:.2f} "
           f"({konfig.QUELLE.get('PERSON_SCHWELLE')}), Abstand {app.abstand:.2f} ({konfig.QUELLE.get('ABSTAND')}), "
           f"Lernen {'an, ab ' + str(app.lernen_ab) + ' Korrekturen' if app.lernen else 'aus'}")
+    if app.verbesserer:
+        brauchbar = app.verbesserer.workflows.brauchbar()
+        print(f"Verbessern: ComfyUI {comfyui} ({'erreichbar' if app.verbesserer.comfy.erreichbar() else 'nicht erreichbar'})"
+              f" · {len(brauchbar)} Workflow{'' if len(brauchbar) == 1 else 's'} in {workflow_ordner}"
+              + (f": {', '.join(w['name'] for w in brauchbar)}" if brauchbar else ""))
+        for w in app.verbesserer.workflows.liste():
+            if w["fehler"]:
+                print(f"Hinweis: Workflow {w['datei']} übersprungen – {w['fehler']}.")
     print(f"Adresse:  {adresse}")
     if netz:
         print(f"Heimnetz: http://{rechner.split('.')[0]}:{port}  ·  http://{lokale_ip()}:{port}"

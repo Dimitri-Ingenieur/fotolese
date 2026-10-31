@@ -30,6 +30,8 @@ auch selbst aufrufen – dann müssen Sie fotosort.py nicht von Hand starten.
   nur im Dateimanager ([mehr](#papierkorb))
 - im Heimnetz erreichbar, z. B. `http://tigris:8765` vom Tablet; importieren nur am Rechner selbst
   ([mehr](#im-heimnetz))
+- Verbessern mit ComfyUI: Workflow wählen, die Fassung kommt in den Unterordner `verbessert`,
+  Vorher/Nachher-Schieber in der Lupe ([mehr](#verbessern-mit-comfyui))
 - Gesichtserkennung auf der Grafikkarte, wenn eine nutzbar ist – NVIDIA, AMD, Intel, Apple ([GPU](#gpu))
 - Seite „Import“: Ordner wählen – bestof.py startet fotosort.py, das ihn ins Archiv kopiert ([mehr](#import-im-browser))
 - doppelte Dateien im Archiv → Papierkorb `Sortiert/Musor/Duplikate`
@@ -164,6 +166,38 @@ Absenderadresse, nicht an einem Passwort. Wer im Heimnetz nicht jedem die Fotos 
 `bestof.conf` ein `PASSWORT` (der Benutzername ist beliebig). `HOST = 127.0.0.1` macht bestof.py wieder
 nur am eigenen Rechner erreichbar, etwa auf einem Laptop in fremden Netzen.
 
+### Verbessern mit ComfyUI
+
+Läuft [ComfyUI](https://github.com/comfyanonymous/ComfyUI) (Standard: auf demselben Rechner, Port 8188),
+hat die Lupe den Knopf **✦ Verbessern**:
+
+1. Foto öffnen, daneben den Workflow wählen (bei mehreren), „✦ Verbessern“ klicken.
+2. bestof.py lädt das Foto zu ComfyUI und zeigt oben rechts den Stand („wartet, Platz 2“,
+   „läuft · 0:35“). Derweil lässt sich weiterblättern, auch weitere Fotos können warten.
+3. Das Ergebnis landet verlustfrei als PNG in `Sortiert/<Ordner>/verbessert/<Name>_<Workflow>.png`,
+   ein weiterer Lauf als `…_2.png`; das Original bleibt unverändert. Die Fassung bekommt Datum und Ort
+   des Originals (EXIF), dazu ein von Hand gesetztes Jahr und die Alben; ComfyUI schreibt den
+   verwendeten Workflow ins PNG.
+4. Danach erscheint der Schieber **Vorher/Nachher**: ziehen (auch mit dem Finger) oder den Regler
+   bewegen; <kbd>V</kbd> schaltet ihn um.
+5. Nach dem Neuladen steht die Fassung als eigene Kachel mit dem Kennzeichen „✦ <Workflow>“ direkt
+   hinter dem Original. Sie lässt sich wie jedes Foto mit Stern markieren, einem Album zuordnen oder in
+   den Papierkorb schieben; in der Lupe vergleicht <kbd>V</kbd> sie mit dem Original.
+
+**Workflows:** in ComfyUI den Workflow öffnen, mit „Export (API)“ speichern und die JSON-Datei in den
+Ordner `workflows/` neben `bestof.py` legen (anderer Ort: `WORKFLOWS` in `bestof.conf`). Jede Datei ist
+eine Wahl neben „Verbessern“, der Name kommt aus dem Dateinamen (`Foto_restore_API.json` → „Foto
+restore“). bestof.py setzt das Foto in den Bild-Eingang (`LoadImage` oder ein anderer Knoten mit dem
+Eingang `image`; bei mehreren den, in dessen Titel „fotolese“ steht), würfelt den Seed jedes Mal neu
+und holt das Bild des Speicher-Knotens (`Save Image`). Ein Workflow im normalen statt im API-Format
+wird beim Start mit Hinweis übersprungen. Mitgeliefert ist „Foto restore“ (siehe
+[Daten und Modelle von Dritten](#daten-und-modelle-von-dritten)).
+
+ComfyUI auf einem anderen Rechner: `COMFYUI = http://rechner:8188`; `COMFYUI = 0` schaltet die Funktion
+ab. Fehler – ComfyUI nicht erreichbar, Modell oder Knoten fehlt – erscheinen als Meldung in der
+Oberfläche. ComfyUI legt die hochgeladenen Fotos in seinem Ordner `input` ab (`fotolese_…`), die
+Ergebnisse zusätzlich in `output/fotolese/`; dort darf man aufräumen.
+
 ## GPU
 
 Die Gesichtserkennung in bestof.py (Index, Gegenprobe, Klick ins Gesicht) rechnet auf der
@@ -238,6 +272,7 @@ fotolese/                    Projektordner
 │       ├── orte.py          GeoNames offline: GPS → nächster größerer Ort
 │       ├── auswahl.py       Sterne je Ordner, Kopien in BestOf
 │       ├── papierkorb.py    Fotos nach Musor schieben und zurückholen, nie löschen
+│       ├── verbessern.py    Fotos mit ComfyUI verbessern, Fassung in <Ordner>/verbessert
 │       ├── alben.py         Alben: anlegen, Fotos zuordnen, für Filter und Oberfläche
 │       ├── index.py         SQLite-Index und Hintergrund-Indexer
 │       ├── gesichter.py     Gesichtserkennung (YuNet/SFace) im Prozess-Pool
@@ -248,6 +283,8 @@ fotolese/                    Projektordner
 │       ├── lernen.py        aus Korrekturen Schwelle und Abstand lernen
 │       ├── importieren.py   Seite „Import“ (nur am Rechner selbst): fotosort.py, Duplikate
 │       └── cli.py           main() und Hilfetext (-h)
+├── workflows/               ComfyUI-Workflows (API-Format) für „Verbessern“
+│   └── Foto_restore_API.json  Qwen Image 2.1 Restore (AusBoss)
 ├── environment.yml          Conda-Umgebung (CPU)
 ├── environment-gpu.yml      Conda-Umgebung mit GPU (NVIDIA, Apple Silicon)
 ├── requirements.txt         Pakete für pip (CPU)
@@ -267,7 +304,8 @@ fotolese/                    Projektordner
 
 ## Datenschutz
 
-- Alles läuft lokal. Fotos verlassen den Rechner nicht.
+- Alles läuft lokal. Fotos verlassen den Rechner nicht – außer zum ComfyUI unter `COMFYUI`, wenn Sie
+  „Verbessern“ nutzen (Standard: derselbe Rechner).
 - Der Index `Sortiert/.bestof-index.sqlite3` enthält Gesichtsmerkmale (biometrische Daten).
   Geben Sie ihn nicht weiter.
 - Die Weboberfläche ist im Heimnetz erreichbar ([Im Heimnetz](#im-heimnetz)); ohne `PASSWORT` kann dort
@@ -282,6 +320,12 @@ Nicht Teil dieses Repositorys. bestof.py lädt sie beim ersten Start nach `~/.ca
 | Ortsdaten cities1000 | [GeoNames](https://www.geonames.org) | CC BY 4.0 |
 | Gesichtserkennung YuNet | [OpenCV Zoo](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet) | MIT |
 | Gesichtsmerkmale SFace | [OpenCV Zoo](https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface) | Apache-2.0 |
+
+Der mitgelieferte Workflow `workflows/Foto_restore_API.json` („Qwen Image 2.1 Restore“) stammt von
+[AusBoss](https://github.com/ausboss). Er braucht ComfyUI 0.38 oder neuer, die Knoten
+[ComfyUI-AusBoss](https://github.com/ausboss/ComfyUI-AusBoss) und die Modelle aus der Notiz im Workflow
+(Qwen Image 2.1, Text-Encoder, VAE, Restore- und Turbo-LoRA, zusammen rund 18 GB). Die lädt und
+verwaltet ComfyUI, nicht bestof.py; für die Turbo-LoRA gilt die Qwen Research License.
 
 ## Haftung
 
