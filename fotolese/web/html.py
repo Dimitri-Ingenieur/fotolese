@@ -7,7 +7,7 @@ from urllib.parse import quote, urlencode
 
 import numpy as np
 
-from fotolese.web.konst import MONATE, PAPIERKORB, VERBESSERT
+from fotolese.web.konst import KOLORIERT, MONATE, PAPIERKORB, VERBESSERT
 from fotolese.web.konfig import (anzeige, bilder_text, bildmasse, datum_kurz, e, groesse_text,
                                  name_aus_id, ort_text, url_id, zeit_text)
 from fotolese.web.suche import ALLE_FOTOS, suche_ausfuehren
@@ -173,7 +173,9 @@ kbd{font-family:var(--zahl);border:1px solid var(--linie);padding:0 5px;border-r
 .trenner::after{content:"⇆";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:30px;height:30px;
   border-radius:50%;background:#fff;color:#222;display:flex;align-items:center;justify-content:center;font-size:16px;
   box-shadow:0 1px 6px rgba(0,0,0,.5)}
-.vlabel{position:absolute;padding:1px 8px;font-size:13px;background:rgba(30,30,30,.82);border-radius:2px;pointer-events:none}
+.vlabel{position:absolute;padding:1px 8px;font-size:13px;background:rgba(30,30,30,.82);border-radius:2px;text-decoration:none}
+.vlabel:hover{text-decoration:underline}
+.lupe .farbhinweis{width:16em;padding:5px 8px;background:var(--flaeche);border:1px solid var(--linie);border-radius:2px}
 .vergleich-an .flaeche{cursor:ew-resize;touch-action:none}
 .vstatus{position:absolute;right:12px;top:10px;margin:0;padding:5px 12px;font-size:13px;background:rgba(30,30,30,.88);
   border-radius:2px;z-index:2;pointer-events:none;max-width:70%}
@@ -693,41 +695,55 @@ document.querySelectorAll('.aloeschen').forEach(k=>k.addEventListener('click',as
 
 JS_VERBESSERN = """
 // Verbessern mit ComfyUI (Auftrag im Hintergrund) und Vorher/Nachher-Schieber in der Lupe
-const VW=D.verbessern||[],wfWahl=lupe.querySelector('.wfwahl'),verbKnopf=lupe.querySelector('.verb'),
+const VW=D.verbessern||[],FARBE=D.kolorieren,farbWahl=lupe.querySelector('.farbwahl'),
+ farbHinweis=lupe.querySelector('.farbhinweis'),wfWahl=lupe.querySelector('.wfwahl'),verbKnopf=lupe.querySelector('.verb'),
  vglKnopf=lupe.querySelector('.vgl'),vRegler=lupe.querySelector('.vregler'),nachherImg=lupe.querySelector('.nachher'),
  trenner=lupe.querySelector('.trenner'),vLabels=[...lupe.querySelectorAll('.vlabel')],vStatus=lupe.querySelector('.vstatus');
 let vergleich=false,vAnteil=50,vZiehen=false,vTimer=null;const vJobs={};  // Auftrag -> {i, t0, s}
 wfWahl.replaceChildren(...VW.map(w=>new Option(w.name,w.datei)));
 try{const m=localStorage.getItem('bestofWorkflow');if(m&&VW.some(w=>w.datei===m))wfWahl.value=m;}catch(_){}
-wfWahl.addEventListener('change',()=>{try{localStorage.setItem('bestofWorkflow',wfWahl.value);}catch(_){}});
-function vPaar(b){return b.ng?[b.g,b.ng]:b.vg?[b.vg,b.g]:null;}  // [vorher, nachher]
+wfWahl.addEventListener('change',()=>{try{localStorage.setItem('bestofWorkflow',wfWahl.value);}catch(_){}verbLupe();});
+if(FARBE){let m=FARBE.standard;try{m=localStorage.getItem('bestofFarbe')||m;}catch(_){}farbWahl.value=m;}
+farbWahl.addEventListener('change',()=>{try{localStorage.setItem('bestofFarbe',farbWahl.value);}catch(_){}verbLupe();});
+function wfAktuell(){return VW.find(x=>x.datei===wfWahl.value)||VW[0];}
+function vPaar(b){return b.paar||(b.ng?[b.g,b.ng]:b.vg?[b.vg,b.g]:null);}  // [vorher, nachher]
+function origVon(g){return g.replace('/g/','/orig/').replace(/[?]v=.*$/,'');}
 function vJob(i){return Object.values(vJobs).find(j=>j.i===i&&j.s.laeuft);}
 function verbLupe(){if(aktiv<0)return;const b=D.bilder[aktiv],job=vJob(aktiv);
  verbKnopf.hidden=!VW.length;wfWahl.hidden=VW.length<2;verbKnopf.disabled=!!job;
+ farbWahl.hidden=!(FARBE&&VW.length&&wfAktuell().farbe);farbHinweis.hidden=farbWahl.hidden||farbWahl.value==='off';
  verbKnopf.textContent=job?'Wird verbessert …':'✦ Verbessern';vglKnopf.hidden=!vPaar(b);
  vglKnopf.setAttribute('aria-pressed',vergleich);vStatus.hidden=!job;
  if(job){const s=job.s,sek=Math.round((Date.now()-job.t0)/1000);
-  vStatus.textContent='Verbessern mit „'+s.workflow+'“: '+(s.phase==='Warteschlange'&&s.platz?'wartet, Platz '+s.platz:
-   s.phase)+' · '+Math.floor(sek/60)+':'+String(sek%60).padStart(2,'0');}}
+  vStatus.textContent='Verbessern mit „'+s.workflow+'“: '+(s.platz?s.phase.replace('Warteschlange','wartet, Platz '+
+   s.platz):s.phase)+' · '+Math.floor(sek/60)+':'+String(sek%60).padStart(2,'0');}}
 async function verbessern(){if(aktiv<0||!VW.length||vJob(aktiv))return;
- const i=aktiv,b=D.bilder[i],w=VW.find(x=>x.datei===wfWahl.value)||VW[0];
- const [ok,j]=await post('/api/verbessern',{pfad:b.ordner+'/'+b.id,workflow:w.datei});
+ const i=aktiv,b=D.bilder[i],w=wfAktuell(),farbe=farbWahl.hidden?'off':farbWahl.value;
+ const [ok,j]=await post('/api/verbessern',{pfad:b.ordner+'/'+b.id,workflow:w.datei,kolorieren:farbe,
+  farbhinweise:farbe==='off'?'':farbHinweis.value.trim()});
  if(!ok){meldung(j.fehler||'Verbessern ließ sich nicht starten.',true);return;}
  vJobs[j.auftrag]={i,t0:Date.now(),s:{laeuft:true,phase:'Hochladen',workflow:w.name}};meldung(j.meldung);verbLupe();vAbfragen();}
 async function vAbfragen(){clearTimeout(vTimer);const ids=Object.keys(vJobs).filter(k=>vJobs[k].s.laeuft);if(!ids.length)return;
  try{const r=await fetch('/api/verbessern?'+ids.map(k=>'id='+encodeURIComponent(k)).join('&'));const j=await r.json();
   for(const k of ids){const s=(j.auftraege||{})[k]||{laeuft:false,fehler:'bestof kennt den Auftrag nicht mehr (neu gestartet?).'};
-   vJobs[k].s=Object.assign({workflow:vJobs[k].s.workflow},s);if(!s.laeuft)vFertig(k);}}catch(_){}
+   vJobs[k].s=Object.assign({workflow:vJobs[k].s.workflow},s);
+   if(s.laeuft&&s.ergebnis&&!vJobs[k].zwischen)vZwischen(k);if(!s.laeuft)vFertig(k);}}catch(_){}
  verbLupe();vTimer=setTimeout(vAbfragen,1500);}
+function vZwischen(k){const {i,s}=vJobs[k];vJobs[k].zwischen=true;  // Pass 1 fertig, Kolorierung läuft noch
+ D.bilder[i].ng=s.ergebnis.g;meldung('Restauriert: '+s.ergebnis.name+' – die Kolorierung läuft noch.');
+ if(aktiv===i)vergleichAn(true);}
 function vFertig(k){const {i,s}=vJobs[k],b=D.bilder[i];
  if(s.fehler){meldung('Verbessern fehlgeschlagen: '+s.fehler,true);return;}
- b.ng=s.ergebnis.g;meldung('Verbessert: '+s.ergebnis.name+' – im Ordner direkt hinter dem Original.',false,
-  ['Ordner neu laden',()=>location.reload()]);
+ b.ng=s.ergebnis.g;if(s.farbe)b.paar=[s.ergebnis.g,s.farbe.g];  // Vergleich: restauriert <-> koloriert
+ meldung((s.farbe?'Restauriert und koloriert: '+s.farbe.name:'Verbessert: '+s.ergebnis.name)+
+  (s.farbfehler?' – Kolorierung fehlgeschlagen: '+s.farbfehler:s.farbinfo?' – '+s.farbinfo:
+   ' – im Ordner direkt hinter dem Original.'),!!s.farbfehler,['Ordner neu laden',()=>location.reload()]);
  if(aktiv===i)vergleichAn(true);}
 function vergleichAn(an){const b=aktiv>=0?D.bilder[aktiv]:null,p=an&&b?vPaar(b):null;
  if(!p){vergleichZu(true);return;}
  vergleich=true;gesichterAn=false;nbox.hidden=true;lupe.classList.add('vergleich-an');
  if(lupeImg.getAttribute('src')!==p[0])lupeImg.src=p[0];nachherImg.src=p[1];
+ vLabels[0].href=origVon(p[0]);vLabels[1].href=origVon(p[1]);  // Schilder öffnen die Dateien (Herunterladen)
  vRegler.hidden=false;[nachherImg,trenner,...vLabels].forEach(x=>x.hidden=false);kaesten();vLagen();verbLupe();}
 function vergleichZu(bildZurueck){if(!vergleich)return;vergleich=false;lupe.classList.remove('vergleich-an');
  vRegler.hidden=true;[nachherImg,trenner,...vLabels].forEach(x=>x.hidden=true);nachherImg.removeAttribute('src');
@@ -741,7 +757,7 @@ function vLagen(){if(!vergleich||!lupeImg.complete||!lupeImg.naturalWidth)return
  vLabels.forEach(l=>{l.style.top=(y+8)+'px';});}
 function vSetzen(ev){const r=lupeImg.getBoundingClientRect();if(!r.width)return;
  vAnteil=Math.max(0,Math.min(100,(ev.clientX-r.left)/r.width*100));vRegler.value=vAnteil;vLagen();}
-flaeche.addEventListener('pointerdown',ev=>{if(!vergleich||ev.target.closest('button,input,.nennbox'))return;vZiehen=true;
+flaeche.addEventListener('pointerdown',ev=>{if(!vergleich||ev.target.closest('a,button,input,.nennbox'))return;vZiehen=true;
  try{flaeche.setPointerCapture(ev.pointerId);}catch(_){}vSetzen(ev);ev.preventDefault();});
 flaeche.addEventListener('pointermove',ev=>{if(vergleich&&vZiehen)vSetzen(ev);});
 ['pointerup','pointercancel'].forEach(t=>flaeche.addEventListener(t,()=>{vZiehen=false;}));
@@ -864,6 +880,12 @@ def bild_daten(app, ordner, bilder):
     return meta, gesichter
 
 
+def farb_daten(app):
+    """Für die Lupe: Kolorierung möglich? Dann {"standard": off|on|auto} (COLORIZE_DEFAULT), sonst None."""
+    farbe = app.verbesserer.farbe if app.verbesserer else None
+    return {"standard": farbe.standard} if farbe else None
+
+
 def fassung_name(name, original):
     """„verbessert/IMG_0001_Foto_restore_2.png“ -> „Foto restore 2“: was hinter dem Namen des Originals steht."""
     stamm = os.path.splitext(name.split("/", 1)[1])[0]
@@ -901,6 +923,13 @@ def bogen_html(app, eintraege, einordner):
             original = herkunft.get(name)
             wf = fassung_name(name, original)
             vg = f"/g/{o}/{url_id(original)}?v={mts[original]}" if original in mts else None
+            stamm, endung = os.path.splitext(name)
+            basis = stamm[:-len(KOLORIERT) - 1] + endung if stamm.endswith(f"_{KOLORIERT}") else None
+            farbig = f"{stamm}_{KOLORIERT}.png"
+            if basis in mts:  # kolorierte Fassung: vorher = ihre Restaurierung
+                vg = f"/g/{o}/{url_id(basis)}?v={mts[basis]}"
+            if farbig in mts:  # Restaurierung: nachher = ihre kolorierte Fassung
+                ng = f"/g/{o}/{url_id(farbig)}?v={mts[farbig]}"
         elif name in neueste:
             ng = f"/g/{o}/{url_id(neueste[name])}?v={mts[neueste[name]]}"
         m = meta.get(rel)
@@ -949,7 +978,8 @@ def bogen_html(app, eintraege, einordner):
 
 LUPE_HTML = ('<div class="lupe" hidden role="dialog" aria-label="Lupe"><div class="flaeche"><img alt="">'
              '<img class="nachher" alt="" hidden><div class="trenner" hidden></div>'
-             '<span class="vlabel" hidden>Vorher</span><span class="vlabel" hidden>Nachher</span>'
+             '<a class="vlabel" target="_blank" rel="noopener" hidden title="Datei öffnen">Vorher ↗</a>'
+             '<a class="vlabel" target="_blank" rel="noopener" hidden title="Datei öffnen">Nachher ↗</a>'
              '<p class="vstatus" hidden role="status"></p>'
              '<p class="ghinweis" hidden></p>'
              '<div class="nennbox" hidden role="dialog" aria-label="Gesicht benennen">'
@@ -968,6 +998,10 @@ LUPE_HTML = ('<div class="lupe" hidden role="dialog" aria-label="Lupe"><div clas
              '<button class="knopf vor" type="button" aria-label="Nächstes Bild">›</button>'
              + STERN_KNOPF + korb_knopf(" – Taste Entf") +
              '<select class="wfwahl" aria-label="Workflow zum Verbessern" hidden></select>'
+             '<select class="farbwahl" aria-label="Kolorierung" hidden><option value="off">ohne Kolorierung</option>'
+             '<option value="on">+ Kolorierung</option><option value="auto">+ Kolorierung, wenn S/W</option></select>'
+             '<input class="farbhinweis" maxlength="300" autocomplete="off" aria-label="Farbhinweise" hidden '
+             'placeholder="Farbhinweise, z. B. Kleid dunkelblau">'
              '<button class="knopf verb" type="button" hidden title="Mit ComfyUI verbessern – das Ergebnis kommt in den '
              'Unterordner verbessert, das Original bleibt">✦ Verbessern</button>'
              '<button class="knopf vgl" type="button" aria-pressed="false" hidden title="Vorher/Nachher vergleichen '
@@ -1011,6 +1045,9 @@ def bogen_hilfe(app):
     verbessern = (' „✦ Verbessern“ in der Lupe schickt das Foto an ComfyUI; die neue Fassung kommt in den Unterordner '
                   f'„{VERBESSERT}“ und steht nach dem Neuladen als eigene Kachel hinter dem Original.'
                   if app.verbesserer else '')
+    if farb_daten(app):
+        verbessern += (' Mit „+ Kolorierung“ folgt ein zweiter Lauf, der Schwarzweiß einfärbt (…_koloriert.png); '
+                       '„wenn S/W“ färbt nur, was keine Farbe hat.')
     if not app.index:
         return f'<p class="hilfe">{text}<kbd>Esc</kbd> schließen.{verbessern}</p>'
     return (f'<p class="hilfe">{text}<kbd>G</kbd> Gesichter (Namensschild anklicken = benennen, fehlt eins: ins '
@@ -1081,7 +1118,7 @@ def ordner_seite(app, ordner):
           "zurueck": f"/o/{zurueck}" if zurueck else None, "weiter": f"/o/{weiter}" if weiter else None,
           "offen": f"/weiter/{ordner}", "uebersicht": f"/?seite={seite_nr}",
           "alben": alben_liste(app.index) if app.index else None,
-          "verbessern": app.verbesserer.fuer_seite() if app.verbesserer else []}
+          "verbessern": app.verbesserer.fuer_seite() if app.verbesserer else [], "kolorieren": farb_daten(app)}
     inhalt += f'<script type="application/json" id="daten">{json_im_html(js)}</script>'
     return seite(f"{ordner} – BestOf", inhalt, JS_BOGEN + JS_ALBEN + JS_VERBESSERN)
 
@@ -1121,7 +1158,7 @@ def such_seite(app, text, seite_nr):
           "auswahl": {o: [url_id(m) for m in app.auswahl.markiert(o)] for o in ordner_menge},
           "ziele": {o: {url_id(m): z for m, z in app.auswahl.ziele(o).items()} for o in ordner_menge},
           "alben": alben_liste(app.index) if app.index else None, "suche": text.strip() or None, "treffer": gesamt,
-          "verbessern": app.verbesserer.fuer_seite() if app.verbesserer else []}
+          "verbessern": app.verbesserer.fuer_seite() if app.verbesserer else [], "kolorieren": farb_daten(app)}
     inhalt += f'<script type="application/json" id="daten">{json_im_html(js)}</script>'
     return seite(f"{text} – BestOf", inhalt, JS_BOGEN + JS_ALBEN + JS_VERBESSERN)
 

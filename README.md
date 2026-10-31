@@ -31,7 +31,7 @@ auch selbst aufrufen – dann müssen Sie fotosort.py nicht von Hand starten.
 - im Heimnetz erreichbar, z. B. `http://tigris:8765` vom Tablet; importieren nur am Rechner selbst
   ([mehr](#im-heimnetz))
 - Verbessern mit ComfyUI: Workflow wählen, die Fassung kommt in den Unterordner `verbessert`,
-  Vorher/Nachher-Schieber in der Lupe ([mehr](#verbessern-mit-comfyui))
+  Vorher/Nachher-Schieber in der Lupe; wahlweise danach kolorieren ([mehr](#verbessern-mit-comfyui))
 - Gesichtserkennung auf der Grafikkarte, wenn eine nutzbar ist – NVIDIA, AMD, Intel, Apple ([GPU](#gpu))
 - Seite „Import“: Ordner wählen – bestof.py startet fotosort.py, das ihn ins Archiv kopiert ([mehr](#import-im-browser))
 - doppelte Dateien im Archiv → Papierkorb `Sortiert/Musor/Duplikate`
@@ -198,6 +198,40 @@ ab. Fehler – ComfyUI nicht erreichbar, Modell oder Knoten fehlt – erscheinen
 Oberfläche. ComfyUI legt die hochgeladenen Fotos in seinem Ordner `input` ab (`fotolese_…`), die
 Ergebnisse zusätzlich in `output/fotolese/`; dort darf man aufräumen.
 
+#### Kolorierung
+
+Neben dem Workflow steht die Wahl **ohne Kolorierung / + Kolorierung / + Kolorierung, wenn S/W**,
+dazu ein Feld für Farbhinweise (z. B. „the dress is dark blue“, höchstens 300 Zeichen). Mit Kolorierung
+folgt nach der Restaurierung ein zweiter Lauf desselben Workflows auf dem restaurierten Bild – mit
+Kolorier-Anweisung, neuem Seed und abgeschalteter Restore-LoRA (sie hielte das Bild grau). Das
+restaurierte Bild ist sofort zu sehen, der Stand zeigt „Kolorierung: wartet …“ bzw. „Kolorierung läuft“.
+Danach vergleicht der Schieber restauriert ↔ koloriert; die Schilder „Vorher ↗“ und „Nachher ↗“ öffnen
+die Dateien. Gespeichert wird `…/verbessert/<Name>_<Workflow>_koloriert.png`, als Kachel direkt hinter
+der restaurierten Fassung.
+
+Der **Luma-Lock** nimmt Helligkeit, Details und Gesichter 1:1 aus der Restaurierung und aus dem
+zweiten Lauf nur die Farbe; dass Qwen beim Neuzeichnen um ein paar Pixel verrutscht, stört so nicht.
+„wenn S/W“ prüft die Farbstreuung des restaurierten Bildes und färbt nur Schwarzweiß und Sepia ein.
+Scheitert die Kolorierung, bleibt die Restaurierung erhalten und die Meldung nennt den Grund.
+
+Dafür braucht der Rechner `ffmpeg` (unter Ubuntu `sudo apt install ffmpeg`); fehlt es, bietet bestof.py
+keine Kolorierung an und sagt das beim Start. Kolorieren kann jeder Workflow mit einem Prompt-Text,
+der genau einen Speicher-Knoten hat – der mitgelieferte „Foto restore“ zum Beispiel. Einstellungen in
+`bestof.conf`:
+
+| Einstellung | Standard | Bedeutung |
+|---|---|---|
+| `COLORIZE_DEFAULT` | `off` | vorgewählt: `off`, `on` oder `auto`; in der Lupe änderbar |
+| `COLORIZE_RESTORE_LORA` | `0` | 0 = Restore-LoRA aus; 0.3–0.5 bei Farbsäumen |
+| `COLORIZE_LUMA_LOCK` | `1` | 0 = Bild des zweiten Laufs unverändert übernehmen |
+| `COLORIZE_CHROMA_BLUR` | `0` | Farbe weichzeichnen (Sigma) gegen Farbsäume |
+| `COLORIZE_MONO_THRESHOLD` | `10` | Farbstreuung darunter gilt als monochrom (`auto`) |
+| `COLORIZE_PROMPT` | leer | eigene Kolorier-Anweisung statt der eingebauten |
+| `COLORIZE_KEEP_RAW` | `0` | 1 = Bild des zweiten Laufs als `…_koloriert_roh.png` behalten |
+
+Das Terminal nennt je Auftrag Farbstreuung (bei `auto`), Seed und Ergebnis – damit lässt sich die
+Schwelle einstellen.
+
 ## GPU
 
 Die Gesichtserkennung in bestof.py (Index, Gegenprobe, Klick ins Gesicht) rechnet auf der
@@ -273,6 +307,7 @@ fotolese/                    Projektordner
 │       ├── auswahl.py       Sterne je Ordner, Kopien in BestOf
 │       ├── papierkorb.py    Fotos nach Musor schieben und zurückholen, nie löschen
 │       ├── verbessern.py    Fotos mit ComfyUI verbessern, Fassung in <Ordner>/verbessert
+│       ├── kolorieren.py    Kolorierung: zweiter Lauf, Luma-Lock mit ffmpeg
 │       ├── alben.py         Alben: anlegen, Fotos zuordnen, für Filter und Oberfläche
 │       ├── index.py         SQLite-Index und Hintergrund-Indexer
 │       ├── gesichter.py     Gesichtserkennung (YuNet/SFace) im Prozess-Pool

@@ -52,6 +52,9 @@ Verbessern (ComfyUI, z. B. auf demselben Rechner, Port 8188):
   Original bleibt. Danach zeigt der Schieber Vorher/Nachher (Taste V); nach dem Neuladen steht die Fassung als
   eigene Kachel hinter dem Original und lässt sich wie jedes Foto mit Stern markieren. Workflows: in ComfyUI mit
   „Export (API)“ speichern und in den Ordner workflows neben bestof.py legen (WORKFLOWS); jede Datei = eine Wahl.
+  Kolorierung (braucht ffmpeg): „+ Kolorierung“ färbt nach der Restaurierung in einem zweiten Lauf ein, „wenn S/W“
+  nur Schwarzweiß und Sepia; dazu optional Farbhinweise. Ergebnis <Name>_<Workflow>_koloriert.png – Helligkeit und
+  Details aus der Restaurierung (Luma-Lock), nur die Farbe aus dem zweiten Lauf.
 Heimnetz:
   bestof.py lauscht auf allen Netzwerken: vom Tablet, Handy oder anderen Rechner http://<Rechnername>:8765,
   z. B. http://tigris:8765 (Name und IP stehen in der Startausgabe). Alles geht von dort – außer Importieren.
@@ -117,6 +120,13 @@ Umgebungsvariablen (Standard in Klammern):
   FOTOSORT   (fotosort.py neben bestof.py)
   COMFYUI    (http://127.0.0.1:8188)  ComfyUI für „Verbessern“; 0 = aus
   WORKFLOWS  (workflows neben bestof.py)  Ordner mit Workflows im API-Format (ComfyUI: Export (API))
+  COLORIZE_DEFAULT (off)   Kolorierung vorgewählt: off | on | auto (nur monochrome Fotos)
+  COLORIZE_RESTORE_LORA (0)  Restore-LoRA im zweiten Lauf: 0 = aus, 0.3–0.5 bei Farbsäumen
+  COLORIZE_LUMA_LOCK (1)   0 = Bild des zweiten Laufs ohne Luma-Lock übernehmen
+  COLORIZE_CHROMA_BLUR (0) Weichzeichnen der Farbe (Sigma) gegen Farbsäume
+  COLORIZE_MONO_THRESHOLD (10)  Farbstreuung darunter gilt als monochrom (auto)
+  COLORIZE_PROMPT ()       eigene Kolorier-Anweisung statt der eingebauten
+  COLORIZE_KEEP_RAW (0)    1 = Bild des zweiten Laufs zusätzlich als …_koloriert_roh.png behalten
   NACHZIEHEN (0.50)        beim Korrigieren eines Gesichts wandern Gesichter derselben Gruppe mit, die ihm
                            mindestens so ähnlich sind und ihm ähnlicher als dem Rest der Gruppe; 1 = aus
   ERKENN_PX  (1920)        Bildgröße für die Gesichtssuche (größer = findet kleinere Gesichter, langsamer);
@@ -153,6 +163,7 @@ from fotolese.web.bild import Vorschau
 from fotolese.web.index import Index, Indexer
 from fotolese.web.lernen import Lerner
 from fotolese.web.server import App, Handler
+from fotolese.web.kolorieren import Kolorierung
 from fotolese.web.verbessern import Verbesserer
 
 
@@ -267,7 +278,13 @@ def main(skript_ordner=None):
     app.daten = os.path.abspath(os.path.expanduser(_env("DATEN", "~/.cache/fotosort")))
     comfyui = _env("COMFYUI", "http://127.0.0.1:8188")
     workflow_ordner = os.path.abspath(os.path.expanduser(_env("WORKFLOWS", os.path.join(basis, "workflows"))))
-    app.verbesserer = None if comfyui == "0" else Verbesserer(app, comfyui, workflow_ordner)
+    farbe = None
+    if comfyui != "0":
+        farbe = Kolorierung(_env("COLORIZE_DEFAULT", "off").lower(), _env("COLORIZE_RESTORE_LORA", 0.0, float),
+                            _env("COLORIZE_LUMA_LOCK", "1") != "0", _env("COLORIZE_CHROMA_BLUR", 0.0, float),
+                            _env("COLORIZE_MONO_THRESHOLD", 10.0, float), _env("COLORIZE_PROMPT", ""),
+                            _env("COLORIZE_KEEP_RAW", "0") != "0")
+    app.verbesserer = None if comfyui == "0" else Verbesserer(app, comfyui, workflow_ordner, farbe)
     app.index, app.indexer = None, None
     if _env("INDEX", "1") != "0":
         try:
@@ -310,6 +327,12 @@ def main(skript_ordner=None):
         for w in app.verbesserer.workflows.liste():
             if w["fehler"]:
                 print(f"Hinweis: Workflow {w['datei']} übersprungen – {w['fehler']}.")
+        if farbe.bereit:
+            koennen = [w["name"] for w in brauchbar if w["farbe"]]
+            print(f"Kolorierung: ffmpeg {farbe.version}, Standard {farbe.standard}, Restore-LoRA {farbe.restore_lora:g}"
+                  f"{', ohne Luma-Lock' if not farbe.luma else ''} · Workflows: {', '.join(koennen) or 'keiner geeignet'}")
+        else:
+            print(f"Kolorierung aus: {farbe.grund} (z. B. sudo apt install ffmpeg).")
     print(f"Adresse:  {adresse}")
     if netz:
         print(f"Heimnetz: http://{rechner.split('.')[0]}:{port}  ·  http://{lokale_ip()}:{port}"

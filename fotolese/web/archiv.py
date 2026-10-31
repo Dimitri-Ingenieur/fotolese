@@ -7,7 +7,7 @@ import os
 import threading
 import time
 
-from fotolese.web.konst import BILD_EXT, ORDNER_MUSTER, VERBESSERT
+from fotolese.web.konst import BILD_EXT, KOLORIERT, ORDNER_MUSTER, VERBESSERT
 from fotolese.web.konfig import natuerlich
 
 
@@ -44,13 +44,22 @@ def _lesen(pfad):
     return liste, roh
 
 
+def _fassung_folge(eintrag):
+    """Sortierschlüssel: die kolorierte Fassung (…_koloriert, …_koloriert_roh) direkt hinter ihrer Restaurierung."""
+    stamm, endung = os.path.splitext(eintrag[0])
+    for rang, zusatz in ((2, f"_{KOLORIERT}_roh"), (1, f"_{KOLORIERT}")):
+        if stamm.casefold().endswith(zusatz):
+            return natuerlich(stamm[:-len(zusatz)] + endung), rang
+    return natuerlich(eintrag[0]), 0
+
+
 def _einreihen(liste, verbessert):
     """Verbesserte Fassungen hinter ihr Original. Original ist das Bild, dessen Namensstamm der längste Anfang
     des verbesserten Namens vor einem „_“ ist: IMG_0001_1_Foto_restore gehört zu IMG_0001_1, nicht zu IMG_0001.
     Rückgabe: (Liste, {verbesserter Name: Original-Name}); Fassungen ohne Original stehen am Ende."""
     staemme = sorted(((os.path.splitext(n)[0].casefold(), n) for n, _, _ in liste), key=lambda s: -len(s[0]))
     je_original, herkunft, ohne = {}, {}, []
-    for v in verbessert:
+    for v in sorted(verbessert, key=_fassung_folge):
         stamm = os.path.splitext(v[0].split("/", 1)[1])[0].casefold()
         original = next((n for s, n in staemme if stamm.startswith(s + "_")), None)
         if original:

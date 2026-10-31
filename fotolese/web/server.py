@@ -270,7 +270,8 @@ class Handler(BaseHTTPRequestHandler):
         if pfad == "/api/verbessern":
             if not app.verbesserer:
                 return self._json(404, {"fehler": "Verbessern ist aus (COMFYUI = 0 in bestof.conf)."})
-            return self._json(*app.verbesserer.starten(daten.get("pfad"), str(daten.get("workflow") or "")))
+            return self._json(*app.verbesserer.starten(daten.get("pfad"), str(daten.get("workflow") or ""),
+                                                        daten.get("kolorieren"), daten.get("farbhinweise")))
         if pfad == "/api/papierkorb":
             return self._json(*papierkorb_api(app, daten))
         if pfad == "/api/person" and app.index:

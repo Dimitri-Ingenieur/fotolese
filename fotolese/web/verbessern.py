@@ -7,6 +7,9 @@ den Bild-Eingang (LoadImage oder ein anderer Knoten mit dem Text-Eingang „imag
 als PNG in SORTIERT/<Ordner>/verbessert/<Name>_<Workflow>.png – mit dem EXIF des Originals (Datum, Ort; die Drehung
 steckt dann schon im Bild) und der Workflow-Beschreibung, die ComfyUI ins PNG schreibt. Von Hand gesetztes Jahr
 und Alben übernimmt die neue Fassung vom Original.
+
+Wahlweise folgt eine Kolorierung (kolorieren.py): zweiter Lauf desselben Workflows auf der restaurierten Fassung,
+Ergebnis nach dem Luma-Lock als …_koloriert.png. Scheitert sie, bleibt die Restaurierung trotzdem gültig.
 """
 import copy
 import errno
@@ -16,6 +19,8 @@ import os
 import random
 import re
 import secrets
+import shutil
+import tempfile
 import threading
 import time
 import traceback
@@ -26,8 +31,9 @@ from urllib.parse import urlencode
 
 from PIL import Image, ImageOps, PngImagePlugin
 
-from fotolese.web.konst import ORDNER_MUSTER, VERBESSERT
+from fotolese.web.konst import KOLORIERT, ORDNER_MUSTER, VERBESSERT
 from fotolese.web.konfig import anzeige, name_aus_id, url_id
+from fotolese.web.kolorieren import MAX_HINWEIS, MODI, FarbFehler, farb_ziele, lora_setzen
 
 FRIST = 3600  # so lange wartet ein Auftrag höchstens auf das Ergebnis (Sekunden)
 MAX_AUFTRAEGE = 200
@@ -70,7 +76,7 @@ class Workflows:
 
     def _laden(self, datei):
         name, kurz = workflow_namen(datei)
-        w = {"datei": datei, "name": name, "kurz": kurz, "daten": None, "eingang": None, "fehler": None}
+        w = {"datei": datei, "name": name, "kurz": kurz, "daten": None, "eingang": None, "fehler": None, "farbe": None}
         try:
             with open(os.path.join(self.ordner, datei), encoding="utf-8") as f:
                 daten = json.load(f)
@@ -88,6 +94,7 @@ class Workflows:
             w["fehler"] = "keine Knoten – ist das ein ComfyUI-Workflow im API-Format?"
         elif len(markiert) == 1 or len(eingaenge) == 1:
             w["daten"], w["eingang"] = daten, (markiert or eingaenge)[0]
+            w["farbe"] = farb_ziele(knoten)  # wo die Kolorierung eingreift, None = nicht möglich
         else:
             w["fehler"] = ("kein Bild-Eingang (z. B. LoadImage)" if not eingaenge
                            else "mehrere Bild-Eingänge – den richtigen Knoten im Titel mit „fotolese“ kennzeichnen")
@@ -188,6 +195,22 @@ def _exif_ohne_drehung(pfad):
         return None
 
 
+def _variante(wf, praefix):
+    """Jeder Lauf eine neue Variante: Seeds neu würfeln (Verbindungen sind Listen und bleiben) und eigener Dateiname
+    bei ComfyUI, damit nichts überschrieben wird. Rückgabe: {Knoten: Seed}."""
+    seeds = {}
+    for nid, knoten in wf.items():
+        eingaben = knoten.get("inputs") if isinstance(knoten, dict) else None
+        if not isinstance(eingaben, dict):
+            continue
+        for k in ("seed", "noise_seed"):
+            if isinstance(eingaben.get(k), int) and not isinstance(eingaben.get(k), bool):
+                eingaben[k] = seeds[nid] = random.randrange(1 << 48)
+        if isinstance(eingaben.get("filename_prefix"), str):
+            eingaben["filename_prefix"] = praefix
+    return seeds
+
+
 def _ausfuehrungsfehler(status):
     for art, d in status.get("messages") or []:
         if art == "execution_interrupted":
@@ -198,24 +221,29 @@ def _ausfuehrungsfehler(status):
     return "ComfyUI meldet einen Fehler – Einzelheiten im ComfyUI-Fenster."
 
 
-def speichern(app, ordner, name, roh, workflow):
-    """Ergebnis als ordner/verbessert/<Stamm>_<Workflow>[_n].png; nie überschreiben. Rückgabe: neuer Name."""
+def speichern(app, ordner, name, roh, workflow, stamm=None, notiz=None, text_von=None):
+    """Ergebnis als ordner/verbessert/<Name>_<Workflow>[_n].png (oder <stamm>[_n].png); nie überschreiben.
+    EXIF und Alben kommen vom Original name; text_von: PNG, dessen ComfyUI-Texte mitkommen. Rückgabe: neuer Name."""
     quelle = os.path.join(app.archiv.pfad, ordner, name)
     ziel = os.path.join(app.archiv.pfad, ordner, VERBESSERT)
     os.makedirs(ziel, exist_ok=True)
-    stamm = os.path.splitext(os.path.basename(name))[0]
+    stamm = stamm or f"{os.path.splitext(os.path.basename(name))[0]}_{workflow['kurz']}"
     exif = _exif_ohne_drehung(quelle)
     with Image.open(io.BytesIO(roh)) as im:
         im.load()
+        texte = im.info
+        if text_von:
+            with Image.open(io.BytesIO(text_von)) as t:
+                texte = t.info
         info = PngImagePlugin.PngInfo()
-        for k, v in im.info.items():  # ComfyUI: „prompt“ und „workflow“ – das PNG lässt sich in ComfyUI wieder öffnen
+        for k, v in texte.items():  # ComfyUI: „prompt“ und „workflow“ – das PNG lässt sich in ComfyUI wieder öffnen
             if isinstance(v, str):
                 info.add_text(k, v)
-        info.add_text("fotolese", json.dumps({"original": anzeige(name), "workflow": workflow["datei"]},
+        info.add_text("fotolese", json.dumps({"original": anzeige(name), "workflow": workflow["datei"], **(notiz or {})},
                                              ensure_ascii=False))
         with _SPEICHERN:
             for k in range(1, 10000):
-                datei = f"{stamm}_{workflow['kurz']}{'' if k == 1 else f'_{k}'}.png"
+                datei = f"{stamm}{'' if k == 1 else f'_{k}'}.png"
                 if not os.path.lexists(os.path.join(ziel, datei)):
                     break
             else:
@@ -241,17 +269,25 @@ def speichern(app, ordner, name, roh, workflow):
 class Auftrag(threading.Thread):
     """Ein Foto mit einem Workflow verbessern: hochladen, in die Warteschlange, warten, abholen, speichern."""
 
-    def __init__(self, verbesserer, ordner, name, workflow):
+    def __init__(self, verbesserer, ordner, name, workflow, farbe="off", hinweise=""):
         super().__init__(daemon=True)
         self.v, self.ordner, self.name, self.workflow = verbesserer, ordner, name, workflow
+        self.farbe, self.hinweise = farbe, hinweise  # Kolorierung: off/on/auto, Farbhinweise
         self.id = secrets.token_urlsafe(9)
+        self.restauriert = None  # Archivname der Fassung aus Pass 1
+        self.notizen = []  # fürs Terminal: Streuung, Seed, Fehler der Kolorierung
         self.status = {"id": self.id, "pfad": f"{ordner}/{url_id(name)}", "workflow": workflow["name"],
-                       "phase": "Hochladen", "platz": None, "laeuft": True, "fehler": "", "ergebnis": None}
+                       "phase": "Hochladen", "platz": None, "laeuft": True, "fehler": "", "ergebnis": None,
+                       "farbmodus": farbe, "farbe": None, "farbfehler": "", "farbinfo": ""}
 
     def run(self):
         st = self.status
         try:
             st["ergebnis"] = self._ausfuehren()
+            if self.farbe != "off":
+                if self.v.app.indexer:
+                    self.v.app.indexer.weiter.set()  # die Restaurierung schon einlesen, während Pass 2 läuft
+                self._kolorieren_sicher()
             st["phase"] = "fertig"
         except Fehler as fehler:
             st["fehler"] = str(fehler)
@@ -263,51 +299,54 @@ class Auftrag(threading.Thread):
             if st["ergebnis"] and self.v.app.indexer:
                 self.v.app.indexer.weiter.set()  # die neue Fassung gleich einlesen
             print(f"Verbessern ({self.workflow['name']}): {self.ordner}/{anzeige(self.name)} – "
-                  f"{st['fehler'] or 'gespeichert als ' + st['ergebnis']['name']}", flush=True)
+                  f"{st['fehler'] or 'gespeichert als ' + st['ergebnis']['name']}"
+                  + "".join(f" · {n}" for n in self.notizen), flush=True)
 
     def _ausfuehren(self):
-        app, comfy, st, w = self.v.app, self.v.comfy, self.status, self.workflow
+        """Pass 1: das Original mit dem Workflow, wie er ist (nur Bild, Seed und Dateiname gesetzt)."""
+        app, comfy, w = self.v.app, self.v.comfy, self.workflow
         quelle = os.path.join(app.archiv.pfad, self.ordner, self.name)
         daten, typ, endung = _hochlade_bild(quelle)
         bild = comfy.hochladen(f"fotolese_{secrets.token_hex(8)}{endung}", daten, typ)
         wf = copy.deepcopy(w["daten"])
         wf[w["eingang"]]["inputs"]["image"] = bild
-        for knoten in wf.values():
-            eingaben = knoten.get("inputs") if isinstance(knoten, dict) else None
-            if not isinstance(eingaben, dict):
-                continue
-            for k in ("seed", "noise_seed"):  # jeder Lauf eine neue Variante (Verbindungen sind Listen, bleiben)
-                if isinstance(eingaben.get(k), int) and not isinstance(eingaben.get(k), bool):
-                    eingaben[k] = random.randrange(1 << 48)
-            if isinstance(eingaben.get("filename_prefix"), str):  # eigener Name: kein Überschreiben bei ComfyUI
-                eingaben["filename_prefix"] = f"fotolese/{secrets.token_hex(6)}"
+        _variante(wf, f"fotolese/{secrets.token_hex(6)}")
+        return self._abholen(self._warten(wf), wf)
+
+    def _warten(self, wf, stufe=""):
+        """Workflow in die Warteschlange und warten, bis der Verlauf ihn kennt; Phase und Platz in den Status."""
+        comfy, st = self.v.comfy, self.status
         antwort = comfy.json("/prompt", {"prompt": wf, "client_id": "fotolese"}, frist=120)
         pid = antwort.get("prompt_id")
         if not pid:
             raise Fehler(_comfy_fehler(200, json.dumps(antwort)))
-        st["phase"] = "Warteschlange"
+        vorne = f"{stufe}: " if stufe else ""
+        st.update(phase=vorne + "Warteschlange", platz=None)
         ende = time.time() + FRIST
         while time.time() < ende:
             eintrag = comfy.json(f"/history/{pid}", frist=30).get(pid)
             if eintrag and (eintrag.get("outputs") or (eintrag.get("status") or {}).get("completed")
                             or (eintrag.get("status") or {}).get("status_str") == "error"):
-                return self._abholen(eintrag, wf)
+                return eintrag
             schlange = comfy.json("/queue", frist=30)
             laufend = [e[1] for e in schlange.get("queue_running") or [] if len(e) > 1]
             wartend = [e[1] for e in sorted(schlange.get("queue_pending") or [], key=lambda e: e[0]) if len(e) > 1]
             if pid in laufend:
-                st.update(phase="läuft", platz=None)
+                st.update(phase=f"{stufe} läuft" if stufe else "läuft", platz=None)
             elif pid in wartend:
-                st.update(phase="Warteschlange", platz=len(laufend) + wartend.index(pid) + 1)
+                st.update(phase=vorne + "Warteschlange", platz=len(laufend) + wartend.index(pid) + 1)
             time.sleep(1)
         raise Fehler("Zeitüberschreitung: ComfyUI hat nach einer Stunde kein Ergebnis geliefert.")
 
-    def _abholen(self, eintrag, wf):
+    def _bild_holen(self, eintrag, wf, knoten=None):
+        """Ergebnisbild aus dem Verlauf laden: bevorzugt „output“ eines Speicher-Knotens, mit knoten nur von dem."""
         status = eintrag.get("status") or {}
         if status.get("status_str") == "error":
             raise Fehler(_ausfuehrungsfehler(status))
         bilder = []
         for nid, aus in (eintrag.get("outputs") or {}).items():
+            if knoten is not None and nid != knoten:
+                continue
             klasse = str((wf.get(nid) or {}).get("class_type", "")).lower()
             for b in (aus or {}).get("images") or []:
                 if isinstance(b, dict) and b.get("filename"):
@@ -315,29 +354,93 @@ class Auftrag(threading.Thread):
         if not bilder:
             raise Fehler("Der Workflow hat kein Bild geliefert – hat er einen Speicher-Knoten (Save Image)?")
         b = min(bilder, key=lambda x: x[0])[1]
-        self.status["phase"] = "Speichern"
-        roh = self.v.comfy.anfrage("/view?" + urlencode({"filename": b["filename"], "subfolder": b.get("subfolder", ""),
-                                                          "type": b.get("type", "output")}), frist=300)
-        neu = speichern(self.v.app, self.ordner, self.name, roh, self.workflow)
+        return self.v.comfy.anfrage("/view?" + urlencode({"filename": b["filename"], "subfolder": b.get("subfolder", ""),
+                                                           "type": b.get("type", "output")}), frist=300)
+
+    def _ergebnis(self, neu):
         self.v.app.archiv.bilder(self.ordner, frisch=True)
         _, _, mt = self.v.app.archiv.datei(self.ordner, neu) or (None, 0, 0)
         uid = url_id(neu)
         return {"name": anzeige(neu), "id": uid, "g": f"/g/{self.ordner}/{uid}?v={mt}", "o": f"/orig/{self.ordner}/{uid}"}
 
+    def _abholen(self, eintrag, wf):
+        roh = self._bild_holen(eintrag, wf)
+        self.status["phase"] = "Speichern"
+        self.restauriert = speichern(self.v.app, self.ordner, self.name, roh, self.workflow)
+        return self._ergebnis(self.restauriert)
+
+    def _kolorieren_sicher(self):
+        """Pass 2 darf scheitern: dann bleibt es bei der Restaurierung, der Fehler steht im Auftrag und im Terminal."""
+        st = self.status
+        try:
+            self._kolorieren()
+        except (Fehler, FarbFehler, OSError, ValueError) as fehler:
+            st["farbfehler"] = str(fehler)
+        except Exception as fehler:
+            traceback.print_exc()
+            st["farbfehler"] = f"{type(fehler).__name__}: {fehler}"
+        if st["farbfehler"]:
+            self.notizen.append(f"Kolorierung fehlgeschlagen: {st['farbfehler']}")
+
+    def _kolorieren(self):
+        """Pass 2: die restaurierte Fassung kolorieren, Luma-Lock, als …_koloriert.png speichern."""
+        app, st, k, w = self.v.app, self.status, self.v.farbe, self.workflow
+        ziele = w["farbe"]
+        with tempfile.TemporaryDirectory(prefix="fotolese_") as tmp:
+            restored = os.path.join(tmp, "restored.png")  # feste Namen: kein „%“ o. Ä. in den ffmpeg-Argumenten
+            shutil.copyfile(os.path.join(app.archiv.pfad, self.ordner, self.restauriert), restored)
+            if self.farbe == "auto":
+                st["phase"] = "Kolorierung: prüft Farbe"
+                streuung = k.streuung(restored)
+                self.notizen.append(f"Farbstreuung {streuung:.1f} (Schwelle {k.schwelle:g})")
+                if streuung >= k.schwelle:
+                    st["farbinfo"] = f"Schon farbig (Streuung {streuung:.1f}) – keine Kolorierung."
+                    return
+            st["phase"] = "Kolorierung: Hochladen"
+            with open(restored, "rb") as f:
+                bild = self.v.comfy.hochladen(f"{self.id}_restored.png", f.read(), "image/png")
+            wf = copy.deepcopy(w["daten"])
+            wf[w["eingang"]]["inputs"]["image"] = bild
+            nid, schluessel = ziele["prompt"]
+            wf[nid]["inputs"][schluessel] = k.prompt_text(self.hinweise)
+            seeds = _variante(wf, f"fotolese/{self.id}_colorize")
+            if ziele["lora"]:
+                lora_setzen(wf[ziele["lora"]], k.restore_lora)
+            self.notizen.append("Seed " + ", ".join(str(s) for s in seeds.values()))
+            roh = self._bild_holen(self._warten(wf, "Kolorierung"), wf, knoten=ziele["speichern"])
+            farbig = roh
+            if k.luma:
+                st["phase"] = "Kolorierung: Farbe übertragen"
+                roh_pfad, fertig = os.path.join(tmp, "colorized_raw.png"), os.path.join(tmp, "colorized.png")
+                with open(roh_pfad, "wb") as f:
+                    f.write(roh)
+                k.luma_lock(restored, roh_pfad, fertig)
+                with open(fertig, "rb") as f:
+                    farbig = f.read()
+        stamm = f"{os.path.splitext(os.path.basename(self.restauriert))[0]}_{KOLORIERT}"
+        notiz = {"pass": "colorize", "seed": list(seeds.values()), "restauriert": anzeige(self.restauriert)}
+        neu = speichern(app, self.ordner, self.name, farbig, w, stamm=stamm, notiz=notiz, text_von=roh)
+        st["farbe"] = self._ergebnis(neu)
+        if k.roh_behalten:
+            speichern(app, self.ordner, self.name, roh, w, stamm=f"{stamm}_roh", notiz=notiz)
+        self.notizen.append(f"koloriert als {anzeige(neu)}")
+
 
 class Verbesserer:
-    def __init__(self, app, comfy_url, workflow_ordner):
+    def __init__(self, app, comfy_url, workflow_ordner, farbe=None):
         self.app = app
         self.comfy = Comfy(comfy_url)
         self.workflows = Workflows(workflow_ordner)
+        self.farbe = farbe if farbe and farbe.bereit else None  # Kolorierung; None ohne ffmpeg
         self.auftraege = OrderedDict()
         self._lock = threading.Lock()
 
     def fuer_seite(self):
-        """Für die Oberfläche: [{"datei", "name"}] der brauchbaren Workflows."""
-        return [{"datei": w["datei"], "name": w["name"]} for w in self.workflows.brauchbar()]
+        """Für die Oberfläche: [{"datei", "name", "farbe"}] der brauchbaren Workflows (farbe: kann kolorieren)."""
+        return [{"datei": w["datei"], "name": w["name"], "farbe": bool(self.farbe and w["farbe"])}
+                for w in self.workflows.brauchbar()]
 
-    def starten(self, pfad, datei):
+    def starten(self, pfad, datei, kolorieren=None, hinweise=None):
         o, _, uid = str(pfad or "").partition("/")
         name = name_aus_id(uid)
         if not (ORDNER_MUSTER.fullmatch(o) and o in self.app.archiv.ordner() and uid and url_id(name) == uid
@@ -346,7 +449,14 @@ class Verbesserer:
         w = next((w for w in self.workflows.brauchbar() if w["datei"] == datei), None)
         if not w:
             return 404, {"fehler": "Workflow nicht gefunden – liegt die Datei noch im Ordner workflows? Seite neu laden."}
-        auftrag = Auftrag(self, o, name, w)
+        modus = kolorieren if kolorieren in MODI else (self.farbe.standard if self.farbe else "off")
+        hinweise = str(hinweise or "").strip()
+        if modus != "off" and not (self.farbe and w["farbe"]):
+            return 400, {"fehler": "Kolorierung geht hier nicht – " + ("ffmpeg fehlt." if not self.farbe else
+                                                                       f"„{w['name']}“ hat keinen Prompt-Text.")}
+        if len(hinweise) > MAX_HINWEIS:
+            return 400, {"fehler": f"Farbhinweise höchstens {MAX_HINWEIS} Zeichen."}
+        auftrag = Auftrag(self, o, name, w, modus, hinweise)
         with self._lock:
             self.auftraege[auftrag.id] = auftrag
             while len(self.auftraege) > MAX_AUFTRAEGE:

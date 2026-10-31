@@ -9,6 +9,7 @@ Thematische Module:
   auswahl     – Sterne (BestOf-Auswahl) je Ordner lesen/schreiben
   papierkorb  – Fotos in den Papierkorb SORTIERT/Musor schieben und zurückholen (nie endgültig löschen)
   verbessern  – Fotos mit ComfyUI verbessern (Workflows im API-Format), Fassung in <Ordner>/verbessert
+  kolorieren  – Kolorierung als zweiter ComfyUI-Lauf, Luma-Lock und Monochrom-Prüfung mit ffmpeg
   alben       – Alben anlegen, Fotos zuordnen (je Foto beliebig viele), API für Leiste, Dialog und Seite „Alben“
   index       – SQLite-Index und Hintergrund-Indexer (Thread)
   gesichter   – Gesichtserkennung (YuNet/SFace) im Prozess-Pool, Nachsuche

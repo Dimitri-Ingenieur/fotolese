@@ -46,6 +46,14 @@ LERNEN_AB = 5            # neu lernen nach so vielen korrigierten Fehlzuordnunge
 # ---- Verbessern mit ComfyUI – siehe README (Abschnitt Verbessern) ----
 # COMFYUI = http://127.0.0.1:8188   # 0 = Knopf „Verbessern“ aus
 # WORKFLOWS = /pfad/zu/workflows      # Standard: workflows neben bestof.py; Workflows im API-Format
+# Kolorierung (zweiter Lauf nach der Restaurierung, braucht ffmpeg):
+# COLORIZE_DEFAULT = off              # off / on / auto (auto = nur Schwarzweiß und Sepia); in der Lupe änderbar
+# COLORIZE_RESTORE_LORA = 0           # 0 = Restore-LoRA aus; 0.3–0.5 bei Farbsäumen
+# COLORIZE_LUMA_LOCK = 1              # 0 = Bild aus Pass 2 unverändert übernehmen
+# COLORIZE_CHROMA_BLUR = 0            # Weichzeichnen der Farbe (Sigma) gegen Farbsäume
+# COLORIZE_MONO_THRESHOLD = 10        # Schwelle für auto: Farbstreuung darunter = monochrom
+# COLORIZE_PROMPT =                   # leer = eingebaute Anweisung (englisch)
+# COLORIZE_KEEP_RAW = 0               # 1 = Bild aus Pass 2 zusätzlich als …_koloriert_roh.png behalten
 
 # ---- Import ----
 # IMPORT = 1             # 0 = Seite „Import“ aus; importieren geht nur an diesem Rechner, nie aus dem Heimnetz
