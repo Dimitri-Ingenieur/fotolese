@@ -395,8 +395,9 @@ class Indexer(threading.Thread):
             fertig, puffer = set(), []
             self.prozesse = min(app.index_jobs, len(rest))
             self.gpu_prozesse = min(app.gpu_jobs, self.prozesse) if wahl else 0
+            gpu_plaetze = ctx.Value("i", 0)  # Zähler mit Semaphor: muss leben, bis jeder Prozess gestartet ist
             self._ex = ProcessPoolExecutor(self.prozesse, mp_context=ctx, initializer=_iw_init,
-                                           initargs=(*args, wahl, app.gpu_jobs, ctx.Value("i", 0)))
+                                           initargs=(*args, wahl, app.gpu_jobs, gpu_plaetze))
             try:
                 futures = [self._ex.submit(_iw_job, a) for a in rest]
                 for f in as_completed(futures):
@@ -418,7 +419,9 @@ class Indexer(threading.Thread):
                     return
                 raise
             finally:
-                self._ex.shutdown(wait=False, cancel_futures=True)
+                # Auf alle Prozesse warten: Ein Nachzügler, der erst hochfährt, wenn die Arbeit schon getan ist,
+                # fände den Zähler sonst nicht mehr (FileNotFoundError im Terminal). Nur beim Beenden nicht warten.
+                self._ex.shutdown(wait=not self._stopp, cancel_futures=True)
                 self._ex = None
                 if puffer:
                     self._schreiben(puffer)

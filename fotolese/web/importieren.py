@@ -17,9 +17,10 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from fotolese.gemein import sha256 as _sha256
-from fotolese.web.konst import PAPIERKORB
-from fotolese.web.konfig import anzeige, e, groesse_text, natuerlich, url_id
+from fotolese.web.konst import BILD_EXT, ORDNER_MUSTER, PAPIERKORB
+from fotolese.web.konfig import anzeige, bilder_text, e, groesse_text, natuerlich, url_id
 from fotolese.web.html import import_frei, kopf, seite
+from fotolese.web.alben import _sauber, album_anlegen, alben_liste
 from fotolese.web.papierkorb import korb_pfad
 
 
@@ -164,16 +165,45 @@ def duplikate_bereinigen(app, auftrag=None):
     return {"meldung": text, "verschoben": verschoben, "bytes": weg_bytes}
 
 
-class Auftrag(threading.Thread):
-    """Import (fotosort.py, Modus copy, mit Duplikatprüfung), Rückgängig oder Duplikatsuche – einer zur Zeit."""
+def _bilder_im_archiv(app, pfade):
+    """Absolute Pfade (fotosort-Protokoll, gemeldete Duplikate) -> „0012/<id>“ der angezeigten Bilder, ohne
+    Doppelte. Zu einer NEF zählt das JPG/PNG gleichen Namens im selben Ordner; was nicht direkt in einem
+    Ordner 0001–9999 liegt, fällt weg (z. B. ein Duplikat innerhalb der Quelle)."""
+    archiv, je_ordner, ergebnis = os.path.abspath(app.archiv.pfad), {}, []
+    for p in pfade:
+        try:
+            o, _, name = os.path.relpath(os.path.abspath(p), archiv).partition(os.sep)
+        except ValueError:  # anderes Laufwerk (Windows)
+            continue
+        if not ORDNER_MUSTER.fullmatch(o) or not name or os.sep in name:
+            continue
+        if o not in je_ordner:
+            namen = [n for n, _, _ in app.archiv.bilder(o, frisch=True)]
+            je_ordner[o] = (set(namen), {os.path.splitext(n)[0].casefold(): n for n in namen})
+        da, je_stamm = je_ordner[o]
+        if name not in da:
+            name = (je_stamm.get(os.path.splitext(name)[0].casefold())
+                    if os.path.splitext(name)[1].lower() not in BILD_EXT else None)
+        if name:
+            ergebnis.append(f"{o}/{url_id(name)}")
+    return list(dict.fromkeys(ergebnis))
 
-    def __init__(self, app, art, ziel=None):
+
+class Auftrag(threading.Thread):
+    """Import (fotosort.py, Modus copy, mit Duplikatprüfung), Rückgängig oder Duplikatsuche – einer zur Zeit.
+    Mit album kommen alle Fotos eines Imports in dieses Album, auch die schon vorhandenen gleichen Inhalts."""
+
+    def __init__(self, app, art, ziel=None, album=None, album_rueck=None):
         super().__init__(daemon=True)
         self.app, self.art, self.ziel = app, art, ziel
         self.proc, self.abbruch = None, False
+        self.album = album  # Import: Name des Albums (schon gesäubert) oder None
+        self.album_zeilen = None  # nach dem Import: (Album-ID, neu eingetragene Pfade, Album neu angelegt?)
+        self.album_rueck = album_rueck  # Rückgängig: album_zeilen des Imports
+        self.doppelt = []  # von fotosort gemeldet: [Quelle, Datei gleichen Inhalts]
         self.status = {"art": art, "ziel": ziel, "laeuft": True, "phase": "Start", "fertig": 0, "gesamt": 0,
                        "zusatz": "", "log": [], "ergebnis": "", "fehler": "", "protokoll": None,
-                       "start": time.time(), "ende": None}
+                       "start": time.time(), "ende": None, "album": album, "album_n": 0}
 
     def _zeile(self, text):
         self.status["log"] = (self.status["log"] + [text])[-400:]
@@ -189,6 +219,9 @@ class Auftrag(threading.Thread):
                 try:
                     d = json.loads(zeile[4:])
                 except ValueError:
+                    continue
+                if "doppelt" in d:
+                    self.doppelt.append(d["doppelt"])
                     continue
                 self.status.update(phase=d.get("titel", ""), fertig=d.get("fertig", 0), gesamt=d.get("gesamt", 0),
                                    zusatz=d.get("zusatz", ""))
@@ -208,6 +241,8 @@ class Auftrag(threading.Thread):
                 wichtig = [z for z in st["log"] if z.startswith(("Gefunden:", "Duplikate:", "Gruppen:", "Ergänzt:",
                                                                  "JPG aus NEF:", "Fertig in", "Alle Bilder sind",
                                                                  "Keine Bilder", "Nichts zu", "Abbruch", "ABGEBROCHEN"))]
+                if self.album and app.index:  # vor der Bereinigung: die gibt Alben an die behaltene Datei weiter
+                    wichtig.append(self._album_zuordnen())
                 if self.abbruch:
                     st["fehler"] = "Abgebrochen. Schon Kopiertes bleibt im Archiv – „Import rückgängig“ entfernt es."
                 elif code:
@@ -220,6 +255,8 @@ class Auftrag(threading.Thread):
                 st["ergebnis"] = "\n".join(z for z in st["log"] if z.startswith(("Fertig", "Nichts zu tun")))
                 if code:
                     st["fehler"] = st["log"][-1] if st["log"] else "Rückgängig fehlgeschlagen."
+                elif self.album_rueck and app.index:
+                    st["ergebnis"] = "\n".join(filter(None, [st["ergebnis"], self._album_zuruecknehmen()]))
             else:
                 st["ergebnis"] = duplikate_bereinigen(app, self)["meldung"]
         except Exception as fehler:
@@ -232,6 +269,48 @@ class Auftrag(threading.Thread):
                 app.indexer.weiter.set()  # neue Bilder gleich einlesen
             art = {"import": "Import", "rueckgaengig": "Rückgängig", "duplikate": "Duplikate"}[self.art]
             print(f"{art}: {st['fehler'] or (st['ergebnis'].splitlines() or ['fertig'])[-1]}", flush=True)
+
+    def _album_zuordnen(self):
+        """Fotos dieses Imports ins gewählte Album: die neu kopierten (Protokoll: kopiert, erzeugte JPG) und die
+        schon vorhandenen gleichen Inhalts, die fotosort übersprungen hat."""
+        app, st = self.app, self.status
+        neu = []
+        if st["protokoll"] and os.path.isfile(st["protokoll"]):
+            with open(st["protokoll"], newline="", encoding="utf-8", errors="surrogateescape") as f:
+                neu = [z["ziel"] for z in csv.DictReader(f) if z.get("ziel") and (z.get("status") or "").split(" ")[0]
+                       in ("kopiert", "erzeugt", "verschoben", "verlinkt")]
+        neu = _bilder_im_archiv(app, neu)
+        schon = [p for p in _bilder_im_archiv(app, [g for _, g in self.doppelt]) if p not in set(neu)]
+        if not neu and not schon:
+            return f"Album „{self.album}“: kein Foto aus diesem Import im Archiv."
+        with app.index.lock:
+            db = app.index.db
+            album, name, angelegt = album_anlegen(db, self.album)
+            vorher = {r[0] for r in db.execute("SELECT pfad FROM album_bild WHERE album=?", (album,))}
+            dazu = [p for p in neu + schon if p not in vorher]
+            db.executemany("INSERT OR IGNORE INTO album_bild(album, pfad) VALUES(?, ?)", [(album, p) for p in dazu])
+            db.commit()
+        self.album_zeilen = (album, dazu, angelegt)
+        st.update(album=name, album_n=len(neu) + len(schon))
+        return (f"Album „{name}“{' (neu angelegt)' if angelegt else ''}: {bilder_text(len(neu) + len(schon))} "
+                f"zugeordnet" + (f", davon {len(schon)} schon vorher im Archiv" if schon else "") + ".")
+
+    def _album_zuruecknehmen(self):
+        """Rückgängig: die Zuordnungen des Imports wieder entfernen; ein dafür neu angelegtes Album verschwindet,
+        wenn es danach leer ist."""
+        album, pfade, angelegt = self.album_rueck
+        with self.app.index.lock:
+            db = self.app.index.db
+            z = db.execute("SELECT name FROM album WHERE id=?", (album,)).fetchone()
+            if not z:
+                return ""
+            db.executemany("DELETE FROM album_bild WHERE album=? AND pfad=?", [(album, p) for p in pfade])
+            leer = angelegt and not db.execute("SELECT 1 FROM album_bild WHERE album=? LIMIT 1", (album,)).fetchone()
+            if leer:
+                db.execute("DELETE FROM album WHERE id=?", (album,))
+            db.commit()
+        return (f"Album „{z[0]}“ wieder gelöscht – es war für diesen Import angelegt." if leer
+                else f"Album „{z[0]}“: {bilder_text(len(pfade))} wieder herausgenommen.")
 
     def abbrechen(self):
         self.abbruch = True
@@ -333,13 +412,21 @@ def import_api(app, pfad, daten):
             return 200, fotos_zaehlen(quelle, app.archiv.pfad)
         if not os.path.isfile(app.fotosort):
             return 500, {"fehler": f"fotosort.py fehlt: {app.fotosort}"}
-        app.auftrag = Auftrag(app, "import", quelle)
+        album = None
+        if str(daten.get("album") or "").strip():
+            if not app.index:
+                return 400, {"fehler": "Alben gibt es nur mit Index (INDEX = 1)."}
+            album, fehler = _sauber(daten.get("album"))
+            if fehler:
+                return 400, {"fehler": fehler}
+        app.auftrag = Auftrag(app, "import", quelle, album=album)
     elif pfad == "/api/import/rueckgaengig":
-        letzte = app.auftrag.status if app.auftrag else {}
+        alt = app.auftrag
+        letzte = alt.status if alt else {}
         protokoll = letzte.get("protokoll") if letzte.get("art") == "import" else None
         if not protokoll or not os.path.isfile(protokoll):
             return 404, {"fehler": "Kein Import-Protokoll gefunden."}
-        app.auftrag = Auftrag(app, "rueckgaengig", protokoll)
+        app.auftrag = Auftrag(app, "rueckgaengig", protokoll, album_rueck=alt.album_zeilen)
     elif pfad == "/api/duplikate" and daten.get("aktion") == "suchen":
         app.auftrag = Auftrag(app, "duplikate")
     else:  # endgültig löschen gibt es über die Weboberfläche nicht – den Papierkorb leert man im Dateimanager
@@ -364,6 +451,12 @@ def import_seite(app):
         inhalt += (f'<p class="leer">fotosort.py fehlt: {e(app.fotosort)}. Legen Sie fotosort.py neben bestof.py '
                    'oder setzen Sie FOTOSORT in bestof.conf.</p>')
         return seite("Import – BestOf", inhalt)
+    album_feld = ""
+    if app.index:
+        vorschlaege = "".join(f'<option value="{e(a["name"])}">' for a in alben_liste(app.index))
+        album_feld = ('<label class="albumwahl">Album (optional)<input id="album" class="pname" list="albenliste" '
+                      'maxlength="60" autocomplete="off" spellcheck="false" placeholder="z. B. Urlaub 2023 – vorhanden '
+                      f'oder neu"></label><datalist id="albenliste">{vorschlaege}</datalist>')
     inhalt += """<main class="import">
 <section><h2>1. Ordner wählen</h2>
 <form class="pfadzeile" id="pfadform"><input id="pfad" class="pname" spellcheck="false" autocomplete="off"
@@ -372,19 +465,21 @@ def import_seite(app):
 <div class="schnell" id="schnell"></div>
 <ul class="ordnerliste" id="liste"></ul></section>
 <section><h2>2. Kopieren</h2>
-<p id="gewaehlt" class="leise"></p>
+<p id="gewaehlt" class="leise"></p>""" + album_feld + """
 <div class="knopfzeile"><button class="knopf" id="zaehlen" type="button">Fotos zählen</button>
 <button class="knopf haupt" id="start" type="button">In Sortiert kopieren</button></div>
 <p id="zahl" class="leise"></p>
 <p class="hilfe0">Die Quelle bleibt unverändert. fotosort.py sortiert ähnliche Fotos in Ordner (ergänzt passende
 bestehende), legt zu NEF ein JPG an und kopiert inhaltsgleiche Dateien (gleiche SHA-256-Prüfsumme) nur einmal.
 Danach bleibt im ganzen Archiv von jedem Inhalt genau eine Datei; überzählige kommen in den Papierkorb
-<code>""" + e(PAPIERKORB) + """/Duplikate</code>.</p></section>
+<code>""" + e(PAPIERKORB) + """/Duplikate</code>.""" + (""" Mit Album kommen alle Fotos des Imports hinein – auch
+solche, die schon im Archiv liegen; ein neuer Name legt das Album an.""" if app.index else "") + """</p></section>
 <section id="lauf" hidden><h2>Fortschritt</h2>
 <p id="phase"></p><progress id="balken" max="1" value="0"></progress>
 <p id="ergebnis" class="ergebnis"></p>
 <div class="knopfzeile"><button class="knopf" id="abbrechen" type="button">Abbrechen</button>
-<button class="knopf" id="rueck" type="button" hidden>Import rückgängig</button></div>
+<button class="knopf" id="rueck" type="button" hidden>Import rückgängig</button>
+<a class="knopf" id="albumlink" hidden></a></div>
 <details><summary>Protokoll</summary><pre id="log"></pre></details></section>
 <section><h2>Doppelte Dateien im Archiv</h2>
 <p id="korb" class="leise"></p>
@@ -422,9 +517,10 @@ $('zaehlen').addEventListener('click',async()=>{$('zahl').textContent='Zähle �
  const arten=Object.entries(j.arten).map(([k,v])=>k.toUpperCase()+' '+v).join(' · ');
  $('zahl').textContent=(j.fertig?'':'mindestens ')+j.anzahl+' Fotos'+(arten?' ('+arten+')':'')+', '+gb(j.bytes)+
   ' in '+j.ordner+' Ordnern'+(j.fertig?'':' – Zählung nach 15 s beendet');});
-$('start').addEventListener('click',async()=>{
- if(!confirm('Alle Fotos aus „'+aktuell.pfad+'“ samt Unterordnern nach Sortiert kopieren?'))return;
- const [ok,j]=await post('/api/import/start',{pfad:aktuell.pfad});
+$('start').addEventListener('click',async()=>{const album=$('album')?$('album').value.trim():'';
+ if(!confirm('Alle Fotos aus „'+aktuell.pfad+'“ samt Unterordnern nach Sortiert kopieren'+
+  (album?' und ins Album „'+album+'“ aufnehmen':'')+'?'))return;
+ const [ok,j]=await post('/api/import/start',{pfad:aktuell.pfad,album});
  if(!ok){meldung(j.fehler||'Start fehlgeschlagen.',true);return;}abfragen();});
 $('abbrechen').addEventListener('click',async()=>{const [ok,j]=await post('/api/import/abbrechen',{});
  meldung(ok?'Abbruch angefordert – der laufende Ordner wird noch fertig.':(j.fehler||'Nichts zu abbrechen.'),!ok);});
@@ -441,12 +537,15 @@ async function abfragen(){clearTimeout(zeitgeber);let j;
  if(!a){$('lauf').hidden=true;return;}
  $('lauf').hidden=false;$('abbrechen').hidden=!laeuft;
  const titel={import:'Import',rueckgaengig:'Rückgängig',duplikate:'Duplikatsuche'}[a.art];
- $('phase').textContent=titel+(a.ziel&&a.art==='import'?' von '+a.ziel:'')+': '+a.phase+
+ $('phase').textContent=titel+(a.ziel&&a.art==='import'?' von '+a.ziel:'')+
+  (a.album&&a.art==='import'?' ins Album „'+a.album+'“':'')+': '+a.phase+
   (a.gesamt?' – '+a.fertig+' von '+a.gesamt:'')+(a.zusatz?' · '+a.zusatz:'');
  $('balken').max=a.gesamt||1;$('balken').value=laeuft?(a.gesamt?a.fertig:0):($('balken').max);
  if(laeuft&&!a.gesamt)$('balken').removeAttribute('value');
  $('ergebnis').textContent=a.fehler||a.ergebnis||'';$('ergebnis').classList.toggle('fehler',!!a.fehler);
  $('log').textContent=a.log.join('\\n');$('rueck').hidden=laeuft||a.art!=='import'||!a.protokoll;
+ const al=$('albumlink');al.hidden=laeuft||a.art!=='import'||!a.album_n;
+ if(!al.hidden){al.href='/suche?q='+encodeURIComponent('Album '+a.album);al.textContent='Album „'+a.album+'“ zeigen';}
  if(laeuft)zeitgeber=setTimeout(abfragen,1000);}
 let start='';try{start=localStorage.getItem('importPfad')||'';}catch(_){}
 oeffnen(start);abfragen();

@@ -38,8 +38,10 @@ Import (Seite „Import“, braucht fotosort.py neben bestof.py; nur an diesem R
   bleibt unverändert), sortiert ähnliche in Ordner, ergänzt passende bestehende, legt zu NEF ein JPG an.
   Inhaltsgleiche Dateien (SHA-256) kommen nur einmal ins Archiv; danach behält das Archiv von jedem Inhalt
   genau eine Datei (bevorzugt: mit Stern in BestOf, mit Labels, ohne Laufindex). Überzählige wandern in den
-  Papierkorb SORTIERT/Musor/Duplikate/<Zeit>/ (mit liste.csv).
-  „Abbrechen“ stoppt nach dem laufenden Ordner, „Import rückgängig“ entfernt die Kopien des letzten Imports.
+  Papierkorb SORTIERT/Musor/Duplikate/<Zeit>/ (mit liste.csv). Optional ein Album (vorhanden oder neu): alle
+  Fotos des Imports kommen hinein, auch die schon vorhandenen gleichen Inhalts.
+  „Abbrechen“ stoppt nach dem laufenden Ordner, „Import rückgängig“ entfernt die Kopien des letzten Imports
+  und seine Album-Zuordnungen.
 Papierkorb (Eimer unter jedem Foto, in der Lupe Taste Entf):
   Das Foto wandert samt NEF und Begleitdateien (.xmp, .pp3) nach SORTIERT/Musor/<Ordner>/, Musor/liste.csv
   vermerkt die Herkunft. „Rückgängig“ bzw. „Zurückholen“ legt es zurück. Fotos mit Stern bleiben (erst den

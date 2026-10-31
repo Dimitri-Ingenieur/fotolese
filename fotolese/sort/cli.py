@@ -56,7 +56,7 @@ from datetime import datetime
 
 from fotolese.gemein import _env
 from fotolese.sort.konst import MAX_ORDNER, VERSION, WINDOWS_FS, _EPOCHE, rawpy
-from fotolese.sort.bericht import Fortschritt, dauer, gb, info, zahl
+from fotolese.sort.bericht import Fortschritt, dauer, gb, info, json_zeile, zahl
 from fotolese.sort.exif import _zeit_aus_name
 from fotolese.sort.bild import analyse_parallel
 from fotolese.sort.cache import Cache
@@ -146,6 +146,8 @@ def main():
     doppelt = {}
     if duplikate_an:
         doppelt = duplikate_finden(bilder, bestand, cache, jobs)
+        for quelle, gleich in sorted(doppelt.items()):  # bestof ordnet beim Import auch diese einem Album zu
+            json_zeile({"doppelt": [quelle, gleich]})
         if doppelt:
             im_bestand = sum(1 for v in doppelt.values() if v.startswith(ausgabe + os.sep))
             bilder = [d for d in bilder if d.pfad not in doppelt]

@@ -33,6 +33,12 @@ def info(text=""):
 JSON_FORTSCHRITT = os.environ.get("FORTSCHRITT_JSON", "").strip() == "1"
 
 
+def json_zeile(daten):
+    """Zusätzliche "#FS"-Zeile für bestof.py (nur mit FORTSCHRITT_JSON=1), z. B. ein übersprungenes Duplikat."""
+    if JSON_FORTSCHRITT:
+        print("#FS " + json.dumps(daten), flush=True)
+
+
 class Fortschritt:
     def __init__(self, titel, gesamt, einheit="Dateien"):
         self.titel, self.gesamt, self.einheit = titel, gesamt, einheit

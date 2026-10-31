@@ -83,7 +83,9 @@ ruft fotosort.py auf und räumt danach auf.
    Hochgeladen wird nichts – auch nicht, wenn die Seite auf Tablet oder Handy offen ist.
 2. **„In Sortiert kopieren“.** bestof.py startet `fotosort.py QUELLE AUSGABE` als eigenen Prozess,
    immer mit `MODUS=copy` (die Quelle bleibt unverändert) und ohne Rückfrage. Fortschrittsbalken
-   und Ausgabe von fotosort.py erscheinen im Browser.
+   und Ausgabe von fotosort.py erscheinen im Browser. Wahlweise vorher ein **Album** eintragen
+   (vorhandenes oder neuer Name): Alle Fotos des Imports kommen hinein – auch die, die fotosort als
+   schon im Archiv vorhanden übersprungen hat.
 3. **Duplikate bereinigen.** Danach behält das Archiv von jedem Inhalt (SHA-256) genau eine Datei:
    bevorzugt die mit Stern (in BestOf), dann eine mit Ihren Labels (Namen, Jahr, Alben), dann die
    ohne Laufindex. Überzählige kommen in den Papierkorb `Sortiert/Musor/Duplikate/<Zeit>/` (mit
@@ -92,7 +94,8 @@ ruft fotosort.py auf und räumt danach auf.
 
 „Abbrechen“ stoppt fotosort.py sauber (ein gerade kopierter Ordner wird noch fertig); schon
 Kopiertes bleibt im Archiv. „Import rückgängig“ ruft fotosort.py mit `MODUS=undo` auf und entfernt
-die Kopien des letzten Imports. Das Protokoll liegt im Archiv; nach einem Neustart von
+die Kopien des letzten Imports, dazu seine Album-Zuordnungen; ein eigens dafür angelegtes Album
+verschwindet, wenn es danach leer ist. Das Protokoll liegt im Archiv; nach einem Neustart von
 bestof.py geht das auch auf der Kommandozeile: `MODUS=undo python fotosort.py AUSGABE/fotosort_<zeit>.csv`.
 
 Voraussetzungen: `fotosort.py` liegt neben `bestof.py` (wie im Projektordner; an anderem Ort
@@ -106,7 +109,8 @@ ganz ab.
 Ein Foto kann in beliebig vielen Alben stehen, z. B. in „Urlaub 2023“ und „Familie“. Unter jedem Foto
 stehen seine Alben; ein Klick darauf zeigt alle Fotos des Albums.
 
-1. **Album anlegen** – auf der Seite „Alben“ oder mit „Neues Album“ über den Fotos.
+1. **Album anlegen** – auf der Seite „Alben“ oder mit „Neues Album“ über den Fotos. Beim Import geht es
+   in einem Schritt: Feld „Album“ auf der Seite „Import“ ([mehr](#import-im-browser)).
 2. **Fotos markieren** – über den Fotos eines Ordners oder Filterergebnisses „Fotos markieren für
    Album …“ wählen, dann ＋ unter den Fotos anklicken (mit Umschalt alle bis zum zuletzt angeklickten)
    oder in der Lupe <kbd>A</kbd> drücken. „Alle hinzufügen“ nimmt den ganzen Ordner bzw. alle Treffer

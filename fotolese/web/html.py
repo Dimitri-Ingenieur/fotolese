@@ -188,6 +188,8 @@ kbd{font-family:var(--zahl);border:1px solid var(--linie);padding:0 5px;border-r
 .import h2{font-size:17px;margin:0 0 10px}
 .import section{border-top:1px solid var(--linie);padding-top:14px}
 .pfadzeile{display:flex;gap:6px}.pfadzeile .pname{flex:1;font-size:15px;width:auto;min-width:0}
+.albumwahl{display:grid;gap:4px;max-width:28em;margin:10px 0 4px;font-size:13px;color:var(--leise)}
+.albumwahl .pname{font-size:15px;width:100%}
 .krumen{display:flex;flex-wrap:wrap;gap:2px;margin:10px 0 6px}
 .krume{background:none;border:0;color:var(--leise);cursor:pointer;padding:2px 4px;font-size:13px}
 .krume:hover{color:var(--text)}.krume:not(:last-child):not(:first-child)::after{content:" /";color:var(--linie)}

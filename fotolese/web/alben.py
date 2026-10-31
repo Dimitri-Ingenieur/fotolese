@@ -47,6 +47,16 @@ def _sauber(roh):
     return name, None
 
 
+def album_anlegen(db, name):
+    """Album mit diesem (gesäuberten) Namen holen – Groß-/Kleinschreibung egal – oder neu anlegen.
+    Rückgabe: (ID, Name wie gespeichert, neu angelegt?). Kein commit."""
+    vorhanden = _gleichnamig(db, name)
+    if vorhanden:
+        return vorhanden, db.execute("SELECT name FROM album WHERE id=?", (vorhanden,)).fetchone()[0], False
+    neu = db.execute("INSERT INTO album(name, angelegt) VALUES(?, ?)", (name, time.strftime("%Y-%m-%d %H:%M:%S")))
+    return neu.lastrowid, name, True
+
+
 def _gleichnamig(db, name, ausser=None):
     """ID eines anderen Albums mit gleichem Namen (Groß-/Kleinschreibung egal, auch Umlaute) oder None."""
     k = name.casefold()
@@ -94,14 +104,10 @@ def _album_aendern(db, daten):
         name, fehler = _sauber(daten.get("name"))
         if fehler:
             return 400, {"fehler": fehler}
-        vorhanden = _gleichnamig(db, name)
-        if vorhanden:
-            name = db.execute("SELECT name FROM album WHERE id=?", (vorhanden,)).fetchone()[0]
-            return 200, {"album": vorhanden, "name": name, "meldung": f"Album „{name}“ gibt es schon."}
-        neu = db.execute("INSERT INTO album(name, angelegt) VALUES(?, ?)",
-                         (name, time.strftime("%Y-%m-%d %H:%M:%S"))).lastrowid
+        album, name, neu = album_anlegen(db, name)
         db.commit()
-        return 200, {"album": neu, "name": name, "meldung": f"Album „{name}“ angelegt."}
+        return 200, {"album": album, "name": name,
+                     "meldung": f"Album „{name}“ angelegt." if neu else f"Album „{name}“ gibt es schon."}
     try:
         album = int(daten.get("id"))
     except (TypeError, ValueError):
