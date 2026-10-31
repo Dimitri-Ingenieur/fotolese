@@ -43,7 +43,7 @@
   },
   "3": {
     "inputs": {
-      "text": "Restore the photo: remove blur, noise and compression artifacts and recover sharp, natural detail, keeping the same composition, people and colors."
+      "text": "Restore the photo: remove all stains, spots, blotches, dust specks and water marks, and seamlessly reconstruct the affected areas with matching texture, tone and color. Also remove blur, noise and compression artifacts and recover sharp, natural detail. Keep the same composition, framing, people, facial features and original colors; change nothing else."
     },
     "class_type": "AUSBOSS_NODES_Text",
     "_meta": {
