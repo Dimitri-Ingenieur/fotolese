@@ -33,13 +33,21 @@ Personen:
   Auf „Personen“: Namensfeld = ganze Gruppe, ✎ = nur dieses Gesicht (mit Nachziehen), ✕ = kein Gesicht.
   „Alle prüfen“ zeigt alle Gesichter einer Gruppe, untypische zuerst – dort stecken Verwechslungen
   (z. B. Kind in der Gruppe eines Elternteils). Anklicken (Umschalt = Bereich), Namen eintippen, fertig.
-Import (Seite „Import“, braucht fotosort.py neben bestof.py):
+Import (Seite „Import“, braucht fotosort.py neben bestof.py; nur an diesem Rechner, nie aus dem Heimnetz):
   Ordner im Browser wählen, „In Sortiert kopieren“. fotosort.py kopiert alle Fotos samt Unterordnern (Quelle
   bleibt unverändert), sortiert ähnliche in Ordner, ergänzt passende bestehende, legt zu NEF ein JPG an.
   Inhaltsgleiche Dateien (SHA-256) kommen nur einmal ins Archiv; danach behält das Archiv von jedem Inhalt
   genau eine Datei (bevorzugt: mit Stern in BestOf, mit Labels, ohne Laufindex). Überzählige wandern in den
-  Papierkorb SORTIERT/.duplikate/<Zeit>/ (mit liste.csv), „Papierkorb leeren“ löscht sie.
+  Papierkorb SORTIERT/Musor/Duplikate/<Zeit>/ (mit liste.csv).
   „Abbrechen“ stoppt nach dem laufenden Ordner, „Import rückgängig“ entfernt die Kopien des letzten Imports.
+Papierkorb (Eimer unter jedem Foto, in der Lupe Taste Entf):
+  Das Foto wandert samt NEF und Begleitdateien (.xmp, .pp3) nach SORTIERT/Musor/<Ordner>/, Musor/liste.csv
+  vermerkt die Herkunft. „Rückgängig“ bzw. „Zurückholen“ legt es zurück. Fotos mit Stern bleiben (erst den
+  Stern entfernen). Endgültig löschen geht über die Weboberfläche nie – den Papierkorb leert man im Dateimanager.
+Heimnetz:
+  bestof.py lauscht auf allen Netzwerken: vom Tablet, Handy oder anderen Rechner http://<Rechnername>:8765,
+  z. B. http://tigris:8765 (Name und IP stehen in der Startausgabe). Alles geht von dort – außer Importieren.
+  PASSWORT schützt die Seiten; HOST = 127.0.0.1 = nur dieser Rechner. Firewall: Port 8765 freigeben.
 Ordneransicht: unter jedem Foto Auflösung, Dateigröße und – falls vorhanden – Größe der NEF-Datei;
   die höchste Auflösung im Ordner ist gelb markiert.
 Alben (Seite „Alben“: anlegen, umbenennen, löschen):
@@ -66,14 +74,16 @@ Aufruf (Conda-Umgebung von fotosort.py):
   python bestof.py /media/$USER/EXTERN/Sortiert
 
 Tasten im Ordner:  ← / →  voriger / nächster Ordner,  N  nächster Ordner ohne Stern
-Tasten in der Lupe: ← / →  Bild,  Leertaste / S  Stern,  G  Gesichter zeigen,  J  Jahr ändern,  Esc  schließen,
+Tasten in der Lupe: ← / →  Bild,  Leertaste / S  Stern,  Entf  Papierkorb,  G  Gesichter zeigen,  J  Jahr ändern,
+                    Esc  schließen,
                     A  Album: ins gewählte Album aufnehmen/herausnehmen, sonst Alben zuordnen
                     (Namensschild anklicken = benennen: ganze Gruppe oder nur dieses Gesicht;
                      Gesicht fehlt = bei eingeblendeten Gesichtern ins Gesicht klicken)
 
 Umgebungsvariablen (Standard in Klammern):
   PORT       (8765)
-  HOST       (127.0.0.1)   0.0.0.0 = auch von Tablet/Handy im Heimnetz (dann PASSWORT setzen)
+  HOST       ()            leer = alle Netzwerke: im Heimnetz unter http://<Rechnername>:8765, z. B. vom Tablet;
+                           127.0.0.1 = nur dieser Rechner
   PASSWORT   ()            Passwortschutz, Benutzername beliebig
   MAX_BEST   (3)           höchstens so viele Sterne (BestOf-Bilder) je Ordner
   BESTOF     (BestOf)      Zielordner, relativ zu SORTIERT oder absolut
@@ -94,7 +104,7 @@ Umgebungsvariablen (Standard in Klammern):
   LERNEN     (1)           0 = Schwelle und Abstand nie automatisch ändern
   LERNEN_AB  (5)           neu lernen nach so vielen korrigierten Fehlzuordnungen
   BESTOF_CONF (bestof.conf neben dem Skript)  andere Einstellungsdatei
-  IMPORT     (1)           0 = Seite „Import“ aus (ohne PASSWORT ohnehin nur bei HOST=127.0.0.1)
+  IMPORT     (1)           0 = Seite „Import“ aus; sonst nur an diesem Rechner (nie aus dem Heimnetz)
   IMPORT_JOBS (Kerne/2)    parallele Prozesse für fotosort beim Import (HDD/USB: z. B. 2–4)
   FOTOSORT   (fotosort.py neben bestof.py)
   NACHZIEHEN (0.50)        beim Korrigieren eines Gesichts wandern Gesichter derselben Gruppe mit, die ihm
@@ -115,6 +125,7 @@ Daten, die beim ersten Start einmalig geladen werden:
   YuNet Gesichtserkennung (MIT), SFace Gesichtsmerkmale (Apache 2.0) aus github.com/opencv/opencv_zoo
 Alles Weitere läuft lokal; keine Fotos verlassen den Rechner.
 """
+import errno
 import os
 import socket
 import sqlite3
@@ -144,6 +155,35 @@ class Server(ThreadingHTTPServer):
         super().handle_error(request, client_address)
 
 
+class Server6(Server):
+    """IPv6-Socket, der auch IPv4 annimmt: erreichbar über jede Adresse, unter der der Rechner im Heimnetz
+    bekannt ist (tigris, tigris.local, 192.168.…, IPv6). IPv4-Absender erscheinen als ::ffff:a.b.c.d."""
+    address_family = socket.AF_INET6
+
+    def server_bind(self):
+        try:
+            self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+        except (AttributeError, OSError):
+            pass
+        super().server_bind()
+
+
+def server_starten(host, port):
+    """HOST leer = alle Netzwerke (IPv6 samt IPv4, ohne IPv6 nur IPv4), sonst genau diese Adresse."""
+    if host:
+        return (Server6 if ":" in host else Server)((host.strip("[]"), port), Handler)
+    if socket.has_ipv6:
+        try:
+            server = Server6(("::", port), Handler)
+            if not server.socket.getsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY):
+                return server
+            server.server_close()  # System erlaubt kein IPv4 auf dem IPv6-Socket
+        except OSError as fehler:
+            if fehler.errno == errno.EADDRINUSE:
+                raise
+    return Server(("0.0.0.0", port), Handler)
+
+
 def lokale_ip():
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
@@ -167,7 +207,7 @@ def main(skript_ordner=None):
                                                        or os.path.join(basis,
                                                                        "bestof.conf"))))
     port = _env("PORT", 8765, int)
-    host = _env("HOST", "127.0.0.1")
+    host = _env("HOST", "")
     bestof = _env("BESTOF", "BestOf")
     bestof = bestof if os.path.isabs(bestof) else os.path.join(archiv_pfad, bestof)
     vorschau_ordner = _env("VORSCHAU", os.path.join(archiv_pfad, ".vorschau"))
@@ -226,13 +266,19 @@ def main(skript_ordner=None):
     Handler.app = app
 
     try:
-        server = Server((host, port), Handler)
+        server = server_starten(host, port)
     except OSError as fehler:
-        sys.exit(f"Fehler: Port {port} auf {host} nicht nutzbar ({fehler.strerror}). Anderen PORT wählen.")
+        sys.exit(f"Fehler: Port {port} auf {host or 'allen Netzwerken'} nicht nutzbar ({fehler.strerror}). "
+                 f"Anderen PORT wählen.")
     server.daemon_threads = True
-    lokal = host in ("127.0.0.1", "localhost", "::1")
-    app.import_erlaubt = _env("IMPORT", "1") != "0" and (lokal or bool(app.passwort))
-    adresse = f"http://{'127.0.0.1' if lokal or host == '0.0.0.0' else host}:{port}"
+    app.port = port
+    app.anfrage = threading.local()  # je Anfrage: kommt sie von diesem Rechner? (Handler._lokal)
+    rechner = socket.gethostname().lower().rstrip(".")
+    app.lokale_namen = {"localhost", rechner, rechner.split(".")[0], rechner.split(".")[0] + ".local"}
+    app.import_erlaubt = _env("IMPORT", "1") != "0"  # und nur für Anfragen von diesem Rechner
+    netz = server.server_address[0] in ("::", "0.0.0.0")
+    nur_hier = host in ("127.0.0.1", "localhost", "::1")
+    adresse = f"http://{'127.0.0.1' if netz or nur_hier else (f'[{host}]' if ':' in host else host)}:{port}"
     print(f"bestof {VERSION}")
     print(f"Archiv:   {archiv_pfad}  ({len(app.archiv.ordner())} Ordner, "
           f"{bilder_text(app.auswahl.anzahl_bilder())} mit Stern)")
@@ -242,9 +288,15 @@ def main(skript_ordner=None):
     print(f"Einstellungen: {konfig.KONFIG.pfad} – Personen: Schwelle {app.person_schwelle:.2f} "
           f"({konfig.QUELLE.get('PERSON_SCHWELLE')}), Abstand {app.abstand:.2f} ({konfig.QUELLE.get('ABSTAND')}), "
           f"Lernen {'an, ab ' + str(app.lernen_ab) + ' Korrekturen' if app.lernen else 'aus'}")
-    print(f"Adresse:  {adresse}" + (f"  ·  im Heimnetz: http://{lokale_ip()}:{port}" if host == "0.0.0.0" else ""))
-    if not lokal and not app.passwort:
-        print("Warnung: ohne PASSWORT kann jeder im Netz die Fotos sehen und Sterne, Alben und Namen ändern.")
+    print(f"Adresse:  {adresse}")
+    if netz:
+        print(f"Heimnetz: http://{rechner.split('.')[0]}:{port}  ·  http://{lokale_ip()}:{port}"
+              f"  (Import nur an diesem Rechner)")
+    elif nur_hier:
+        print("Nur auf diesem Rechner erreichbar (HOST = 127.0.0.1).")
+    if not nur_hier and not app.passwort:
+        print("Hinweis: Ohne PASSWORT kann jeder im Heimnetz die Fotos sehen, Sterne, Alben und Namen ändern und "
+              "Fotos in den Papierkorb schieben – importieren geht nur hier, endgültig löschen gar nicht.")
     print("Strg+C beendet.", flush=True)
     if app.indexer:
         app.indexer.start()

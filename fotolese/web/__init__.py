@@ -1,4 +1,4 @@
-"""fotolese.web – bestof: Weboberfläche zum Durchsehen, Filtern und BestOf-Auswählen.
+"""fotolese.web – bestof: Weboberfläche zum Durchsehen und Filtern; die besten Fotos bekommen einen Stern.
 
 Thematische Module:
   konst       – Konstanten, Muster, Monatsnamen, Modell-Quellen
@@ -6,7 +6,8 @@ Thematische Module:
   archiv      – Zugriff auf den Sortiert-Ordner (Ordner, Bilder, BestOf-Pfade)
   bild        – Vorschaubilder erzeugen und zwischenspeichern
   orte        – GeoNames-Orte offline (GPS -> nächster größerer Ort)
-  auswahl     – BestOf-Auswahl je Ordner lesen/schreiben
+  auswahl     – Sterne (BestOf-Auswahl) je Ordner lesen/schreiben
+  papierkorb  – Fotos in den Papierkorb SORTIERT/Musor schieben und zurückholen (nie endgültig löschen)
   alben       – Alben anlegen, Fotos zuordnen (je Foto beliebig viele), API für Leiste, Dialog und Seite „Alben“
   index       – SQLite-Index und Hintergrund-Indexer (Thread)
   gesichter   – Gesichtserkennung (YuNet/SFace) im Prozess-Pool, Nachsuche
@@ -15,6 +16,6 @@ Thematische Module:
   html        – Seiten und Bausteine der Oberfläche
   server      – HTTP-Server, Handler und Aktionen (Jahr/Person/Gesicht ändern)
   lernen      – aus Korrekturen Schwelle/Abstand lernen (Thread)
-  importieren – Ordner über fotosort ins Archiv holen, Duplikate bereinigen
+  importieren – Ordner über fotosort ins Archiv holen, Duplikate bereinigen (nur an diesem Rechner)
   cli         – Start (main)
 """

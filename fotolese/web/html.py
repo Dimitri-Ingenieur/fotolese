@@ -7,7 +7,7 @@ from urllib.parse import quote, urlencode
 
 import numpy as np
 
-from fotolese.web.konst import MONATE
+from fotolese.web.konst import MONATE, PAPIERKORB
 from fotolese.web.konfig import (anzeige, bilder_text, bildmasse, datum_kurz, e, groesse_text,
                                  name_aus_id, ort_text, url_id, zeit_text)
 from fotolese.web.suche import ALLE_FOTOS, suche_ausfuehren
@@ -95,6 +95,17 @@ button,input{font:inherit;color:inherit}
 .knopf.stern:hover{color:var(--stift)}
 .gewaehlt .stern{border-color:var(--stift);color:var(--stift)}.gewaehlt .stern svg{fill:currentColor}
 .voll .stern{opacity:.45}
+.knopf.korb{flex:none;display:inline-flex;align-items:center;justify-content:center;padding:6px 8px;color:var(--leise)}
+.korb svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.knopf.korb:hover{color:var(--fehler);border-color:var(--fehler)}
+.knopf.holen{display:none;flex:none;font-size:13px;padding:5px 9px}
+/* weggeworfen: Kachel bleibt stehen (nichts rutscht unter den Mauszeiger), „Zurückholen“ an derselben Stelle */
+.feld.weg .holen{display:inline-block}
+.feld.weg .stern,.feld.weg .korb,.feld.weg .ordnernr{display:none}
+.feld.weg .technik,.feld.weg .meta,.feld.weg .alben{visibility:hidden}
+.feld.weg .rahmen{cursor:default}.feld.weg .rahmen img{opacity:.12}
+.feld.weg .zelle::after{content:"Im Papierkorb";position:absolute;inset:0;display:flex;align-items:center;
+  justify-content:center;color:var(--leise);pointer-events:none}
 .technik{width:100%;font-size:12px;color:var(--leise);font-variant-numeric:tabular-nums;white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis}
 .technik.spitze{color:var(--stift)}
@@ -154,6 +165,7 @@ kbd{font-family:var(--zahl);border:1px solid var(--linie);padding:0 5px;border-r
   padding:9px 14px;border-radius:2px;max-width:min(92vw,60ch);z-index:20}
 .meldung.fehler{background:var(--fehler);color:#1f1f1f}
 .meldung[hidden]{display:none}
+.meldung .mknopf{margin-left:12px;color:inherit;font-weight:600;font-size:inherit}
 .lupe:not([hidden]) ~ .meldung{bottom:96px}
 /* Personen */
 .personen{padding:10px 16px 40px;display:grid;gap:26px}
@@ -187,6 +199,7 @@ kbd{font-family:var(--zahl);border:1px solid var(--linie);padding:0 5px;border-r
 .knopfzeile{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
 .knopf.haupt{border-color:var(--stift);color:var(--stift)}
 .hilfe0{font-size:13px;color:var(--leise);max-width:80ch}
+.hilfe0 code{overflow-wrap:anywhere}
 .import progress{width:100%;height:10px;accent-color:var(--stift)}
 .ergebnis{white-space:pre-line}.ergebnis.fehler{color:var(--fehler)}
 .import pre{max-height:40vh;overflow:auto;font-size:12px;background:var(--lupe);padding:10px;white-space:pre-wrap}
@@ -245,8 +258,11 @@ FAVICON = ("data:image/svg+xml," + quote(
 
 JS_GEMEINSAM = """
 const meldungEl=document.querySelector('.meldung');let meldungTimer;
-function meldung(text,fehler){meldungEl.textContent=text;meldungEl.classList.toggle('fehler',!!fehler);
- meldungEl.hidden=false;clearTimeout(meldungTimer);meldungTimer=setTimeout(()=>meldungEl.hidden=true,fehler?6000:2600);}
+function meldung(text,fehler,aktion){meldungEl.textContent=text;meldungEl.classList.toggle('fehler',!!fehler);
+ if(aktion){const k=document.createElement('button');k.type='button';k.className='link mknopf';k.textContent=aktion[0];
+  k.addEventListener('click',()=>{meldungEl.hidden=true;aktion[1]();});meldungEl.append(k);}  // aktion: [Text, Funktion]
+ meldungEl.hidden=false;clearTimeout(meldungTimer);
+ meldungTimer=setTimeout(()=>meldungEl.hidden=true,aktion?10000:fehler?6000:2600);}
 async function post(url,daten){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
  body:JSON.stringify(daten||{})});let j={};try{j=await r.json();}catch(_){j={fehler:'Server antwortet nicht.'};}
  return [r.ok,j];}
@@ -283,7 +299,8 @@ function zeichne(){
   f.classList.toggle('gewaehlt',an);f.classList.toggle('voll',voll);
   f.querySelector('.buchstabe').textContent=an&&l.length>1?ABC[k]:'';sternKnopf(f.querySelector('.stern'),b,an,voll);});
  if(D.einordner){const l=D.auswahl[D.ordner]||[];
-  info.textContent=D.bilder.length+(D.bilder.length===1?' Bild, ':' Bilder, ')+l.length+' von '+D.max+' mit Stern';
+  const n=D.bilder.filter(b=>!b.weg).length;
+  info.textContent=n+(n===1?' Bild, ':' Bilder, ')+l.length+' von '+D.max+' mit Stern';
   zielEl.textContent=l.length?'BestOf: '+l.map(id=>D.ziele[D.ordner][id]).join(', '):'Noch kein Stern (☆ = Kopie in BestOf)';}
  if(aktiv>=0)lupeZeichne();}
 async function umschalten(i){
@@ -292,8 +309,25 @@ async function umschalten(i){
  laeuft=true;const [ok,j]=await post('/api/auswahl',{ordner:b.ordner,datei:b.id});laeuft=false;
  if(!ok){meldung(j.fehler||'Stern setzen fehlgeschlagen.',true);return;}
  D.auswahl[b.ordner]=j.auswahl;D.ziele[b.ordner]=j.ziele;zeichne();meldung(j.meldung);}
+// Papierkorb: Foto wandert nach SORTIERT/Musor, die Kachel bleibt als „Im Papierkorb“ stehen; „Rückgängig“ holt es zurück
+async function wegwerfen(i){const b=D.bilder[i];if(!b||b.weg)return;
+ if((D.auswahl[b.ordner]||[]).includes(b.id)){
+  meldung('Das Bild hat einen Stern – erst den Stern entfernen, dann in den Papierkorb.',true);return;}
+ b.weg=true;const [ok,j]=await post('/api/papierkorb',{pfad:b.ordner+'/'+b.id});  // weg=true: kein Doppelklick
+ if(!ok){b.weg=false;meldung(j.fehler||'Verschieben fehlgeschlagen.',true);return;}
+ b.rueck=j.rueck;wegZeigen(i,true);meldung(j.meldung,false,['Rückgängig',()=>zurueckholen(i)]);}
+async function zurueckholen(i){const b=D.bilder[i];if(!b.weg||!b.rueck)return;
+ const [ok,j]=await post('/api/papierkorb',{rueck:b.rueck});
+ if(!ok){meldung(j.fehler||'Zurückholen fehlgeschlagen.',true);return;}b.rueck=null;wegZeigen(i,false);meldung(j.meldung);}
+function wegZeigen(i,an){D.bilder[i].weg=an;felder[i].classList.toggle('weg',an);
+ if(an&&aktiv===i){const k=sichtbar(i,1);if(k<0)schliesse();else oeffne(k);}
+ zeichne();if(typeof albLeiste==='function')albLeiste();}
+function sichtbar(i,schritt){const n=D.bilder.length;  // nächstes nicht weggeworfenes Bild ab i
+ for(let k=0;k<n;k++){const j=((i+k*schritt)%n+n)%n;if(!D.bilder[j].weg)return j;}return -1;}
 felder.forEach((f,i)=>{f.querySelector('.stern').addEventListener('click',()=>umschalten(i));
- f.querySelector('.rahmen').addEventListener('click',()=>oeffne(i));
+ f.querySelector('.korb').addEventListener('click',()=>wegwerfen(i));
+ f.querySelector('.holen').addEventListener('click',()=>zurueckholen(i));
+ f.querySelector('.rahmen').addEventListener('click',()=>{if(!D.bilder[i].weg)oeffne(i);});
  const k=f.querySelector('.jsetz');if(k)k.addEventListener('click',ev=>jahrKlick(i,ev.shiftKey));});
 function vorladen(i){if(i>=0&&i<D.bilder.length){const b=new Image();b.src=D.bilder[i].g;}}
 function hinweisText(b){const n=b.f.length,klick=' Ins Gesicht klicken, um es zu markieren.';
@@ -393,7 +427,7 @@ function jsetzZeichne(k,b){if(!k)return;k.hidden=setzJahr===null;if(k.hidden)ret
  k.title=(gleich?'Hat schon das Jahr '+setzJahr:'Jahr '+setzJahr+' setzen')+' – mit Umschalt alle Fotos bis zum zuletzt angeklickten';}
 async function jahrKlick(i,bereich){if(setzJahr===null||i<0)return;const jahr=setzJahr;let von=i,bis=i;
  if(bereich&&jahrLetzte>=0){von=Math.min(jahrLetzte,i);bis=Math.max(jahrLetzte,i);}jahrLetzte=i;
- const pfade=D.bilder.slice(von,bis+1).filter(b=>b.j!==jahr).map(b=>b.ordner+'/'+b.id);
+ const pfade=D.bilder.slice(von,bis+1).filter(b=>b.j!==jahr&&!b.weg).map(b=>b.ordner+'/'+b.id);
  if(!pfade.length){meldung((von===bis?'Hat':'Alle haben')+' schon das Jahr '+jahr+'.');return;}
  let j={},n=0;
  for(let k=0;k<pfade.length;k+=1000){let ok;[ok,j]=await post('/api/jahr',{pfade:pfade.slice(k,k+1000),jahr:String(jahr)});
@@ -421,29 +455,32 @@ function lupeZeichne(){const b=D.bilder[aktiv],l=D.auswahl[b.ordner]||[],an=l.in
  lupeKarte.hidden=!b.k;if(b.k)lupeKarte.href=b.k;
  gzKnopf.hidden=!D.gesichter;gzKnopf.textContent='Gesichter'+(b.f.length?' ('+b.f.length+')':'');
  sternKnopf(lupeKnopf,b,an,voll);lupeKnopf.title+=' (Leertaste oder S)';kaesten();albenLupe();}
-function oeffne(i){nbox.hidden=true;nGesicht=null;aktiv=(i+D.bilder.length)%D.bilder.length;const b=D.bilder[aktiv];
+function oeffne(i,schritt){const j=sichtbar(i,schritt||1);if(j<0){schliesse();return;}
+ nbox.hidden=true;nGesicht=null;aktiv=j;const b=D.bilder[aktiv];
  lupeImg.src=b.g;lupeImg.alt=b.name;lupeOrig.href=b.o;lupe.hidden=false;lupeZeichne();if(gesichterAn)gesichterHolen(aktiv);
  vorladen(aktiv+1);vorladen(aktiv-1);lupe.querySelector('.zu').focus({preventScroll:true});}
 function schliesse(){if(aktiv<0)return;nbox.hidden=true;nGesicht=null;const f=felder[aktiv];aktiv=-1;lupe.hidden=true;
  lupeImg.removeAttribute('src');
  kaesten();f.querySelector('.rahmen').focus({preventScroll:true});f.scrollIntoView({block:'nearest'});}
 lupeImg.addEventListener('load',kaesten);window.addEventListener('resize',kaesten);
-lupe.querySelector('.zurueck').addEventListener('click',()=>oeffne(aktiv-1));
+lupe.querySelector('.zurueck').addEventListener('click',()=>oeffne(aktiv-1,-1));
 lupe.querySelector('.vor').addEventListener('click',()=>oeffne(aktiv+1));
 lupe.querySelector('.zu').addEventListener('click',schliesse);
 gzKnopf.addEventListener('click',()=>{gesichterAn=!gesichterAn;if(!gesichterAn)nbox.hidden=true;else gesichterHolen(aktiv);kaesten();});
 lupeKnopf.addEventListener('click',()=>umschalten(aktiv));
+lupe.querySelector('.korb').addEventListener('click',()=>wegwerfen(aktiv));
 let wischX=null;lupe.addEventListener('touchstart',ev=>{wischX=ev.touches[0].clientX;},{passive:true});
 lupe.addEventListener('touchend',ev=>{if(wischX===null)return;const dx=ev.changedTouches[0].clientX-wischX;wischX=null;
- if(Math.abs(dx)>60)oeffne(aktiv+(dx<0?1:-1));});
+ if(Math.abs(dx)>60)oeffne(aktiv+(dx<0?1:-1),dx<0?1:-1);});
 document.addEventListener('keydown',ev=>{
  if(ev.altKey||ev.ctrlKey||ev.metaKey||ev.target.matches('input,select'))return;
  if(albenOffen()){if(ev.key==='Escape'){albenZu();ev.preventDefault();}return;}
  if(aktiv>=0){
   if(!nbox.hidden&&ev.key==='Escape'){nennenZu();ev.preventDefault();}
   else if(ev.key==='ArrowRight'){oeffne(aktiv+1);ev.preventDefault();}
-  else if(ev.key==='ArrowLeft'){oeffne(aktiv-1);ev.preventDefault();}
+  else if(ev.key==='ArrowLeft'){oeffne(aktiv-1,-1);ev.preventDefault();}
   else if(ev.key===' '||ev.key==='s'||ev.key==='S'||ev.key==='b'){umschalten(aktiv);ev.preventDefault();}
+  else if(ev.key==='Delete'){wegwerfen(aktiv);ev.preventDefault();}
   else if(ev.key==='g'||ev.key==='G'){gesichterAn=!gesichterAn;if(!gesichterAn)nbox.hidden=true;else gesichterHolen(aktiv);kaesten();}
   else if((ev.key==='j'||ev.key==='J')&&lupeJahr){lupeJahr.focus();lupeJahr.select();ev.preventDefault();}
   else if(ev.key==='a'||ev.key==='A'){albumTaste();ev.preventDefault();}
@@ -547,7 +584,8 @@ async function albSetzen(daten){const [ok,j]=await post('/api/album_bild',daten)
  if(!ok){meldung(j.fehler||'Speichern fehlgeschlagen.',true);return false;}albUebernehmen(j);meldung(j.meldung);return true;}
 function albumKlick(i,bereich){if(aktAlbum===null||i<0)return;const an=!(D.bilder[i].a||[]).includes(aktAlbum);let von=i,bis=i;
  if(bereich&&albLetzte>=0){von=Math.min(albLetzte,i);bis=Math.max(albLetzte,i);}albLetzte=i;
- const pfade=[];for(let k=von;k<=bis;k++)pfade.push(albPfad(D.bilder[k]));albSetzen({album:aktAlbum,an,pfade});}
+ const pfade=[];for(let k=von;k<=bis;k++)if(!D.bilder[k].weg)pfade.push(albPfad(D.bilder[k]));
+ if(pfade.length)albSetzen({album:aktAlbum,an,pfade});}
 function albAuswahl(){if(!aktSel)return;
  aktSel.replaceChildren(new Option(ALB.length?'Fotos markieren für Album …':'Noch kein Album',''),
   ...ALB.map(a=>new Option(a.name+' ('+a.n+')',String(a.id))));aktSel.value=aktAlbum===null?'':String(aktAlbum);}
@@ -557,8 +595,9 @@ function albAktiv(id){aktAlbum=id!==null&&(ALB||[]).some(a=>a.id===id)?id:null;a
  albAlleZeichnen();}
 function albLeiste(){if(!albLeisteEl)return;const an=aktAlbum!==null;albAlle.hidden=albRaus.hidden=!an;
  if(!an){albInfo.textContent=ALB.length?'Album wählen, dann Fotos mit ＋ hinzufügen.':'Neues Album anlegen, dann Fotos mit ＋ hinzufügen.';return;}
- const n=D.bilder.filter(b=>(b.a||[]).includes(aktAlbum)).length,alle=D.suche?D.treffer:D.bilder.length,mehr=alle>D.bilder.length;
- albInfo.textContent=n+' von '+D.bilder.length+' hier im Album. ＋ unter dem Foto oder Taste A in der Lupe, Umschalt = Bereich.';
+ const da=D.bilder.filter(b=>!b.weg),n=da.filter(b=>(b.a||[]).includes(aktAlbum)).length,
+  alle=D.suche?D.treffer:da.length,mehr=alle>da.length;
+ albInfo.textContent=n+' von '+da.length+' hier im Album. ＋ unter dem Foto oder Taste A in der Lupe, Umschalt = Bereich.';
  albAlle.textContent=mehr?'Alle '+alle+' Treffer hinzufügen':'Alle '+alle+' hinzufügen';
  albRaus.textContent=mehr?'Alle Treffer entfernen':'Alle entfernen';}
 function albenLupe(){if(!ALB||aktiv<0)return;const ids=D.bilder[aktiv].a||[],an=aktAlbum!==null&&ids.includes(aktAlbum);
@@ -651,6 +690,12 @@ STERN_KNOPF = (f'<button class="knopf stern" type="button" aria-pressed="false" 
                f'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="{STERN_WEG}"/></svg></button>')
 
 
+def korb_knopf(taste=""):
+    return (f'<button class="knopf korb" type="button" aria-label="In den Papierkorb" title="In den Papierkorb '
+            f'(Ordner {PAPIERKORB}){taste}"><svg viewBox="0 0 24 24" aria-hidden="true">'
+            f'<path d="M4 7h16M10 7V4.5h4V7M6.2 7l1 13h9.6l1-13M10 11v6M14 11v6"/></svg></button>')
+
+
 def sterne_svg(n):
     """Auf der Ordnerkachel: ein kleiner Stern je Bild mit Stern (höchstens drei gezeichnet)."""
     if not n:
@@ -683,10 +728,16 @@ def status_text(app):
     return text, False
 
 
+def import_frei(app):
+    """Import und Ordnerwahl nur für Anfragen von dem Rechner, auf dem bestof.py läuft (Handler._lokal):
+    Die Ordnerwahl zeigt dessen Laufwerke – das soll niemand aus dem Heimnetz sehen."""
+    return app.import_erlaubt and getattr(getattr(app, "anfrage", None), "lokal", False)
+
+
 def kopf(app, aktiv="", inhalt_titel="", suchtext=""):
     text, laeuft = status_text(app)
     navi = [("ordner", "/", "Ordner")]
-    if app.import_erlaubt:
+    if import_frei(app):
         navi.append(("import", "/import", "Import"))
     if app.index:
         navi.append(("alben", "/alben", "Alben"))
@@ -773,7 +824,8 @@ def bogen_html(app, eintraege, einordner):
             f'<path pathLength="100" d="{stift_pfad(f"{o}{name}")}"/></svg>'
             f'<span class="buchstabe" aria-hidden="true"></span>{nr}</div>'
             f'<figcaption><span class="lfd">{i + 1}</span><span class="dateiname" title="{e(name)}">{e(name)}</span>'
-            f'{STERN_KNOPF}'
+            f'{STERN_KNOPF}{korb_knopf()}<button class="knopf holen" type="button" title="Aus dem Papierkorb '
+            f'zurück in den Ordner">Zurückholen</button>'
             f'<span class="technik{" spitze" if oben else ""}"'
             + (' title="Höchste Auflösung in diesem Ordner"' if oben else "") + f'>{e(technik)}</span>'
             f'<span class="meta">{jahr_html}<span class="mtext">{meta_html}</span></span>'
@@ -803,7 +855,7 @@ LUPE_HTML = ('<div class="lupe" hidden role="dialog" aria-label="Lupe"><div clas
              '<span class="info"></span><span class="lalben" hidden></span></span>'
              '<button class="knopf zurueck" type="button" aria-label="Voriges Bild">‹</button>'
              '<button class="knopf vor" type="button" aria-label="Nächstes Bild">›</button>'
-             + STERN_KNOPF +
+             + STERN_KNOPF + korb_knopf(" – Taste Entf") +
              '<button class="knopf almark" type="button" aria-pressed="false" title="Taste A" hidden></button>'
              '<button class="knopf alb" type="button" title="Alben zuordnen (Taste A)">Alben</button>'
              '<button class="knopf gz" type="button" title="Taste G">Gesichter</button>'
@@ -835,8 +887,9 @@ ALBBOX = ('<div class="albbox" hidden role="dialog" aria-label="Alben zuordnen">
 def bogen_hilfe(app):
     """Hilfezeile unter dem Kontaktbogen (Ordner und Filter)."""
     text = (f'Bild anklicken zum Vergrößern. ☆ unter dem Bild = Stern: kopiert es nach BestOf (je Ordner höchstens '
-            f'{app.auswahl.max_best}). In der Lupe: <kbd>←</kbd> <kbd>→</kbd> blättern, <kbd>Leertaste</kbd> oder '
-            f'<kbd>S</kbd> Stern, ')
+            f'{app.auswahl.max_best}). Der Eimer daneben schiebt das Foto in den Papierkorb (Ordner {PAPIERKORB}, '
+            f'mit „Rückgängig“; endgültig löschen geht nur im Dateimanager). In der Lupe: <kbd>←</kbd> <kbd>→</kbd> '
+            f'blättern, <kbd>Leertaste</kbd> oder <kbd>S</kbd> Stern, <kbd>Entf</kbd> Papierkorb, ')
     if not app.index:
         return f'<p class="hilfe">{text}<kbd>Esc</kbd> schließen.</p>'
     return (f'<p class="hilfe">{text}<kbd>G</kbd> Gesichter (Namensschild anklicken = benennen, fehlt eins: ins '

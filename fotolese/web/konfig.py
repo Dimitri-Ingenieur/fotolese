@@ -7,6 +7,7 @@ import html
 import math
 import os
 import re
+import stat
 import threading
 from collections import OrderedDict
 from urllib.parse import quote, unquote_to_bytes
@@ -43,14 +44,14 @@ LERNEN_AB = 5            # neu lernen nach so vielen korrigierten Fehlzuordnunge
 # GPU_JOBS = 2           # so viele Index-Prozesse rechnen auf der GPU, die übrigen auf der CPU
 
 # ---- Import ----
-# IMPORT = 1             # 0 = Seite „Import“ aus
+# IMPORT = 1             # 0 = Seite „Import“ aus; importieren geht nur an diesem Rechner, nie aus dem Heimnetz
 # IMPORT_JOBS = 4        # parallele Prozesse für fotosort; Standard: Hälfte der Kerne
 # FOTOSORT = /pfad/zu/fotosort.py   # Standard: neben bestof.py
 
 # ---- Server und Anzeige ----
 # PORT = 8765
-# HOST = 127.0.0.1       # 0.0.0.0 = auch im Heimnetz, dann PASSWORT setzen
-# PASSWORT =
+# HOST =                # leer = alle Netzwerke: im Heimnetz http://<Rechnername>:8765; 127.0.0.1 = nur hier
+# PASSWORT =            # schützt die Seiten (Benutzername beliebig), sinnvoll im Heimnetz
 # BROWSER = 1
 # MAX_BEST = 3
 # BESTOF = BestOf
@@ -65,11 +66,19 @@ LERNEN_AB = 5            # neu lernen nach so vielen korrigierten Fehlzuordnunge
 """
 
 LERN_SCHLUESSEL = ("PERSON_SCHWELLE", "ABSTAND")
+# Kommentarzeilen früherer Vorlagen, die heute Falsches sagen -> neue Fassung (Werte ändert das nie)
+VORLAGE_ALT = {
+    "# IMPORT = 1             # 0 = Seite „Import“ aus":
+        "# IMPORT = 1             # 0 = Seite „Import“ aus; importieren geht nur an diesem Rechner, nie aus dem Heimnetz",
+    "# HOST = 127.0.0.1       # 0.0.0.0 = auch im Heimnetz, dann PASSWORT setzen":
+        "# HOST =                # leer = alle Netzwerke: im Heimnetz http://<Rechnername>:8765; 127.0.0.1 = nur hier",
+    "# PASSWORT =": "# PASSWORT =            # schützt die Seiten (Benutzername beliebig), sinnvoll im Heimnetz",
+}
 
 
 class Konfig:
     """bestof.conf: NAME = Wert, # Kommentare. bestof.py schreibt nur gelernte Werte zurück und lässt
-    Kommentare und eigene Zeilen stehen."""
+    Kommentare und eigene Zeilen stehen; veraltete Hinweiszeilen der eigenen Vorlage frischt es auf."""
 
     def __init__(self, pfad):
         self.pfad = pfad
@@ -83,7 +92,21 @@ class Konfig:
             except OSError as fehler:
                 self.schreibbar = False
                 print(f"Hinweis: {pfad} lässt sich nicht anlegen ({fehler}) – es gelten Standardwerte.")
+        else:
+            self._vorlage_auffrischen()
         self.laden()
+
+    def _vorlage_auffrischen(self):
+        """Hinweiszeilen früherer Vorlagen, die heute Falsches sagen (z. B. zu HOST), ersetzen – nur
+        auskommentierte Zeilen, genau wie bestof.py sie einst schrieb; Werte bleiben unberührt."""
+        try:
+            with open(self.pfad, encoding="utf-8") as f:
+                zeilen = f.read().splitlines()
+            neu = [VORLAGE_ALT.get(z, z) for z in zeilen]
+            if neu != zeilen:
+                self._schreiben(neu)
+        except (OSError, UnicodeDecodeError):
+            pass
 
     @staticmethod
     def zerlegen(zeile):
@@ -111,6 +134,10 @@ class Konfig:
         tmp = self.pfad + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             f.write("\n".join(zeilen) + "\n")
+        try:  # Rechte behalten: steht ein PASSWORT drin, soll eine nur für den Besitzer lesbare Datei das bleiben
+            os.chmod(tmp, stat.S_IMODE(os.stat(self.pfad).st_mode))
+        except OSError:
+            pass
         os.replace(tmp, self.pfad)
 
     def setzen(self, neu, notiz=None):

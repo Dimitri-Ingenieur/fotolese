@@ -5,6 +5,7 @@ Die Aktionen (Jahr setzen, Personen/Gesichter ändern, Gesicht nachsuchen) geben
 """
 import base64
 import hmac
+import ipaddress
 import json
 import os
 import re
@@ -22,9 +23,10 @@ from fotolese.web.bild import PLATZHALTER
 from fotolese.web.gesichter import GesichtsSucher, _ueberdeckung, _ueberlappung
 from fotolese.web.lernen import _fehler_aehnlichkeit, _lernlog, lernen
 from fotolese.web.alben import album_api
-from fotolese.web.html import (alben_seite, bild_daten, gruppe_pruefen_seite, ordner_seite, ordner_zusammen,
-                               personen_seite, status_text, such_seite, uebersicht)
+from fotolese.web.html import (alben_seite, bild_daten, gruppe_pruefen_seite, import_frei, ordner_seite,
+                               ordner_zusammen, personen_seite, status_text, such_seite, uebersicht)
 from fotolese.web.importieren import import_api, import_seite, ordner_liste, papierkorb_inhalt
+from fotolese.web.papierkorb import papierkorb_api
 
 
 class App:
@@ -80,8 +82,37 @@ class Handler(BaseHTTPRequestHandler):
                      extra={"WWW-Authenticate": 'Basic realm="BestOf", charset="UTF-8"'})
         return False
 
+    def _host_name(self):
+        """Rechnername aus dem Host-Kopf, ohne Port: „tigris:8765“ -> „tigris“, „[::1]:8765“ -> „::1“."""
+        h = (self.headers.get("Host") or "").strip().lower()
+        if h.startswith("["):
+            return h[1:h.find("]")] if "]" in h else ""
+        return (h.rsplit(":", 1)[0] if h.count(":") == 1 else h).rstrip(".")
+
+    def _lokal(self):
+        """Kommt die Anfrage von diesem Rechner? Absender ist eine Loopback-Adresse oder dieselbe Adresse, unter
+        der der Rechner die Verbindung angenommen hat (Browser auf tigris öffnet http://tigris:8765). Zusätzlich
+        muss der Host-Kopf eine IP-Adresse oder ein Name dieses Rechners sein: Sonst könnte eine fremde Webseite
+        im Browser über einen eigenen Namen, der auf 127.0.0.1 zeigt, den Import erreichen (DNS-Rebinding)."""
+        try:
+            gegen = ipaddress.ip_address(str(self.client_address[0]).split("%")[0])
+            hier = ipaddress.ip_address(str(self.connection.getsockname()[0]).split("%")[0])
+        except (ValueError, OSError):
+            return False
+        gegen = getattr(gegen, "ipv4_mapped", None) or gegen  # IPv4 über einen IPv6-Socket: ::ffff:a.b.c.d
+        hier = getattr(hier, "ipv4_mapped", None) or hier
+        if not (gegen.is_loopback or gegen == hier):
+            return False
+        name = self._host_name()
+        try:
+            ipaddress.ip_address(name)
+            return True
+        except ValueError:
+            return name in self.app.lokale_namen
+
     def _sicher(self, fn):
         try:
+            self.app.anfrage.lokal = self._lokal()
             if self._erlaubt():
                 fn()
         except (BrokenPipeError, ConnectionResetError):
@@ -134,9 +165,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._senden(200, html_typ, alben_seite(app))
         if teile.path == "/import":
             return self._senden(200, html_typ, import_seite(app))
+        if teile.path in ("/api/ordner", "/api/import/status") and not import_frei(app):
+            return self._json(403, {"fehler": "Import geht nur an dem Rechner, auf dem bestof.py läuft."})
         if teile.path == "/api/ordner":
-            if not app.import_erlaubt:
-                return self._json(403, {"fehler": "Import ist hier nicht freigegeben."})
             return self._json(200, ordner_liste(app, q.get("pfad", [""])[0]))
         if teile.path == "/api/import/status":
             a = app.auftrag
@@ -232,6 +263,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(code, antwort)
         if pfad == "/api/neuaufbau":
             return self._json(200, app.auswahl.neu_aufbauen())
+        if pfad == "/api/papierkorb":
+            return self._json(*papierkorb_api(app, daten))
         if pfad == "/api/person" and app.index:
             return self._json(*person_aendern(app, daten))
         if pfad == "/api/gesicht" and app.index:

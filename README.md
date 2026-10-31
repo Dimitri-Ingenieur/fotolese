@@ -26,9 +26,13 @@ auch selbst aufrufen – dann müssen Sie fotosort.py nicht von Hand starten.
 - Alben: jedes Foto in beliebig vielen Alben, sichtbar unter dem Foto, im Filter nutzbar ([mehr](#alben))
 - „Alle Fotos“ und Jahr per Klick: das Archiv durchgehen, Alben und Jahre schnell zuordnen
   ([mehr](#alle-fotos-und-jahr-per-klick))
+- Papierkorb: ein Klick schiebt ein Foto nach `Sortiert/Musor`, mit „Rückgängig“; endgültig gelöscht wird
+  nur im Dateimanager ([mehr](#papierkorb))
+- im Heimnetz erreichbar, z. B. `http://tigris:8765` vom Tablet; importieren nur am Rechner selbst
+  ([mehr](#im-heimnetz))
 - Gesichtserkennung auf der Grafikkarte, wenn eine nutzbar ist – NVIDIA, AMD, Intel, Apple ([GPU](#gpu))
 - Seite „Import“: Ordner wählen – bestof.py startet fotosort.py, das ihn ins Archiv kopiert ([mehr](#import-im-browser))
-- doppelte Dateien im Archiv → Papierkorb `Sortiert/.duplikate`
+- doppelte Dateien im Archiv → Papierkorb `Sortiert/Musor/Duplikate`
 - Auflösung und Dateigröße unter jedem Foto
 
 ## Installation
@@ -82,9 +86,8 @@ ruft fotosort.py auf und räumt danach auf.
    und Ausgabe von fotosort.py erscheinen im Browser.
 3. **Duplikate bereinigen.** Danach behält das Archiv von jedem Inhalt (SHA-256) genau eine Datei:
    bevorzugt die mit Stern (in BestOf), dann eine mit Ihren Labels (Namen, Jahr, Alben), dann die
-   ohne Laufindex. Überzählige kommen in den Papierkorb `Sortiert/.duplikate/<Zeit>/` (mit `liste.csv`),
-   ihre Alben gehen auf die behaltene Datei über.
-   „Papierkorb leeren“ löscht sie endgültig, „Jetzt prüfen“ bereinigt auch ohne Import.
+   ohne Laufindex. Überzählige kommen in den Papierkorb `Sortiert/Musor/Duplikate/<Zeit>/` (mit
+   `liste.csv`), ihre Alben gehen auf die behaltene Datei über. „Jetzt prüfen“ bereinigt auch ohne Import.
 4. **Einlesen.** Der Index liest die neuen Bilder sofort ein (Datum, Ort, Gesichter).
 
 „Abbrechen“ stoppt fotosort.py sauber (ein gerade kopierter Ordner wird noch fertig); schon
@@ -93,8 +96,9 @@ die Kopien des letzten Imports. Das Protokoll liegt im Archiv; nach einem Neusta
 bestof.py geht das auch auf der Kommandozeile: `MODUS=undo python fotosort.py AUSGABE/fotosort_<zeit>.csv`.
 
 Voraussetzungen: `fotosort.py` liegt neben `bestof.py` (wie im Projektordner; an anderem Ort
-`FOTOSORT` setzen). Die Seite ist nur freigegeben, wenn bestof.py ausschließlich am eigenen Rechner erreichbar ist
-(`HOST=127.0.0.1`, Standard) oder ein `PASSWORT` gesetzt ist; `IMPORT=0` schaltet sie ganz ab.
+`FOTOSORT` setzen). Importieren geht nur an dem Rechner, auf dem bestof.py läuft – aus dem Heimnetz
+ist die Seite gesperrt, weil die Ordnerwahl die Laufwerke dieses Rechners zeigt. `IMPORT=0` schaltet sie
+ganz ab.
 `IMPORT_JOBS` legt fest, wie viele Prozesse fotosort.py beim Import nutzt (HDD/USB: z. B. 2–4).
 
 ### Alben
@@ -127,6 +131,34 @@ Fotos anklicken; mit Umschalt bekommen alle Fotos bis zum zuletzt angeklickten d
 jedem Ordner und Filterergebnis, auch in der Lupe. ✕ oder <kbd>Esc</kbd> im Jahresfeld der Leiste
 beendet es. Wie beim Jahresfeld unter dem Foto gilt das Jahr vor EXIF und Dateiname (gelb = von Hand);
 leeren + Enter im Feld unter dem Foto gibt wieder das Jahr aus der Datei.
+
+### Papierkorb
+
+Der Eimer neben dem Stern (in der Lupe auch die Taste <kbd>Entf</kbd>) schiebt ein Foto in den
+Papierkorb: Es wandert samt NEF und Begleitdateien (`.xmp`, `.pp3`) nach `Sortiert/Musor/<Ordner>/`,
+`Musor/liste.csv` vermerkt, woher es kam. Die Kachel bleibt bis zum Neuladen als „Im Papierkorb“
+stehen; „Rückgängig“ in der Meldung oder „Zurückholen“ an der Kachel legt das Foto zurück. Fotos mit
+Stern lassen sich nicht wegwerfen – erst den Stern entfernen.
+
+Endgültig löschen geht über die Weboberfläche nie, auch nicht im Heimnetz. Den Papierkorb leeren Sie
+bei Bedarf im Dateimanager; dort liegen auch die überzähligen Duplikate (`Musor/Duplikate`). Ein Foto
+von Hand zurückholen: aus `Musor/0012/` zurück nach `0012/` verschieben – bestof.py liest es wieder ein,
+Namen, Jahr und Alben sind noch da. Ältere Versionen legten Duplikate in den versteckten Ordner
+`Sortiert/.duplikate`; der bleibt, wie er ist.
+
+### Im Heimnetz
+
+bestof.py ist im ganzen Heimnetz erreichbar: Läuft es auf dem Rechner `tigris`, öffnen Sie auf
+Tablet, Handy oder einem anderen Rechner `http://tigris:8765`. Beim Start nennt bestof.py den Namen
+und die IP-Adresse; klappt der Name nicht, hilft `http://tigris.local:8765` oder die IP
+(z. B. `http://192.168.178.20:8765`). Blockiert eine Firewall, Port 8765 freigeben, unter Ubuntu
+z. B. `sudo ufw allow 8765/tcp`.
+
+Aus dem Heimnetz geht alles außer dem Import: Fotos ansehen, Sterne, Alben, Jahre, Namen, Papierkorb.
+Importieren geht nur an dem Rechner selbst (`http://localhost:8765`) – bestof.py erkennt das an der
+Absenderadresse, nicht an einem Passwort. Wer im Heimnetz nicht jedem die Fotos zeigen will, setzt in
+`bestof.conf` ein `PASSWORT` (der Benutzername ist beliebig). `HOST = 127.0.0.1` macht bestof.py wieder
+nur am eigenen Rechner erreichbar, etwa auf einem Laptop in fremden Netzen.
 
 ## GPU
 
@@ -201,15 +233,16 @@ fotolese/                    Projektordner
 │       ├── bild.py          Vorschaubilder erzeugen und zwischenspeichern
 │       ├── orte.py          GeoNames offline: GPS → nächster größerer Ort
 │       ├── auswahl.py       Sterne je Ordner, Kopien in BestOf
+│       ├── papierkorb.py    Fotos nach Musor schieben und zurückholen, nie löschen
 │       ├── alben.py         Alben: anlegen, Fotos zuordnen, für Filter und Oberfläche
 │       ├── index.py         SQLite-Index und Hintergrund-Indexer
 │       ├── gesichter.py     Gesichtserkennung (YuNet/SFace) im Prozess-Pool
 │       ├── gpu.py           Gesichtsmodelle auf der GPU: Auswahl, Prüfung, Rückfall auf CPU
-│       ├── suche.py         Suchbegriffe deuten: Jahr, Ort, Person, Album, Ordner, Dateiname
+│       ├── suche.py         Suchbegriffe: Jahr, Ort, Person, Album, Ordner, Dateiname
 │       ├── html.py          Seiten, CSS und JavaScript der Oberfläche
 │       ├── server.py        HTTP-Handler und /api-Aktionen
 │       ├── lernen.py        aus Korrekturen Schwelle und Abstand lernen
-│       ├── importieren.py   Seite „Import“: startet fotosort.py, bereinigt Duplikate
+│       ├── importieren.py   Seite „Import“ (nur am Rechner selbst): fotosort.py, Duplikate
 │       └── cli.py           main() und Hilfetext (-h)
 ├── environment.yml          Conda-Umgebung (CPU)
 ├── environment-gpu.yml      Conda-Umgebung mit GPU (NVIDIA, Apple Silicon)
@@ -233,8 +266,8 @@ fotolese/                    Projektordner
 - Alles läuft lokal. Fotos verlassen den Rechner nicht.
 - Der Index `Sortiert/.bestof-index.sqlite3` enthält Gesichtsmerkmale (biometrische Daten).
   Geben Sie ihn nicht weiter.
-- Die Weboberfläche ist im Standard nur am eigenen Rechner erreichbar (`HOST=127.0.0.1`).
-  Für Tablet oder Handy im Heimnetz: `HOST=0.0.0.0` und immer `PASSWORT` setzen.
+- Die Weboberfläche ist im Heimnetz erreichbar ([Im Heimnetz](#im-heimnetz)); ohne `PASSWORT` kann dort
+  jeder die Fotos sehen. In fremden Netzen (Laptop unterwegs) `HOST=127.0.0.1` oder ein `PASSWORT` setzen.
 
 ## Daten und Modelle von Dritten
 

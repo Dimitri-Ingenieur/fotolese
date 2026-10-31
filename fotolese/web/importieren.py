@@ -7,7 +7,6 @@ import csv
 import json
 import os
 import re
-import shutil
 import signal
 import subprocess
 import sys
@@ -18,34 +17,37 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from fotolese.gemein import sha256 as _sha256
+from fotolese.web.konst import PAPIERKORB
 from fotolese.web.konfig import anzeige, e, groesse_text, natuerlich, url_id
-from fotolese.web.html import kopf, seite
+from fotolese.web.html import import_frei, kopf, seite
+from fotolese.web.papierkorb import korb_pfad
 
 
 FOTO_EXT = {".jpg", ".jpeg", ".png", ".nef"}
 OHNE_ORDNER = {"@eaDir", "$RECYCLE.BIN", "System Volume Information", "lost+found"}
 
 
-def papierkorb(app):
-    return os.path.join(app.archiv.pfad, ".duplikate")
-
-
 def papierkorb_inhalt(app):
-    anzahl, groesse = 0, 0
-    for wurzel, _, dateien in os.walk(papierkorb(app)):
-        for d in dateien:
-            if not d.endswith(".csv"):
-                try:
-                    groesse += os.path.getsize(os.path.join(wurzel, d))
-                    anzahl += 1
-                except OSError:
-                    pass
-    return anzahl, groesse
+    """(Dateien, Bytes) im Papierkorb Musor – weggeworfene Fotos und überzählige Duplikate – und
+    (Dateien, Bytes) im alten Duplikat-Papierkorb .duplikate früherer Versionen."""
+    ergebnis = []
+    for wurzel in (korb_pfad(app), os.path.join(app.archiv.pfad, ".duplikate")):
+        anzahl, groesse = 0, 0
+        for ort, _, dateien in os.walk(wurzel):
+            for d in dateien:
+                if not d.endswith(".csv"):
+                    try:
+                        groesse += os.path.getsize(os.path.join(ort, d))
+                        anzahl += 1
+                    except OSError:
+                        pass
+        ergebnis += [anzahl, groesse]
+    return ergebnis
 
 
 def duplikate_bereinigen(app, auftrag=None):
-    """Inhaltsgleiche Dateien (SHA-256) in den Ordnern 0001–9999 auf eine reduzieren. Die übrigen kommen nach
-    SORTIERT/.duplikate/<Zeit>/ (Papierkorb mit liste.csv). Behalten wird zuerst die mit Stern (in BestOf),
+    """Inhaltsgleiche Dateien (SHA-256) in den Ordnern 0001–9999 auf eine reduzieren. Die übrigen kommen in den
+    Papierkorb SORTIERT/Musor/Duplikate/<Zeit>/ (mit liste.csv). Behalten wird zuerst die mit Stern (in BestOf),
     dann eine mit Ihren Labels (Namen, Jahr, Alben), dann die ohne Laufindex im Namen, dann die im kleinsten Ordner.
     Geprüft werden nur Dateien gleicher Größe; Prüfsummen merkt sich der Index."""
     st = auftrag.status if auftrag else {}
@@ -112,7 +114,7 @@ def duplikate_bereinigen(app, auftrag=None):
         return (0 if (o, n) in markiert else 1, 0 if f"{o}/{url_id(n)}" in gelabelt else 1,
                 1 if laufindex else 0, o, len(n), n)
 
-    korb = os.path.join(papierkorb(app), time.strftime("%Y%m%d-%H%M%S"))
+    korb = os.path.join(korb_pfad(app), "Duplikate", time.strftime("%Y%m%d-%H%M%S"))
     os.makedirs(korb, exist_ok=True)
     verschoben, weg_bytes, betroffen, fehler = 0, 0, set(), 0
     with open(os.path.join(korb, "liste.csv"), "w", newline="", encoding="utf-8", errors="surrogateescape") as f:
@@ -156,7 +158,8 @@ def duplikate_bereinigen(app, auftrag=None):
         except OSError:
             pass
     app.archiv.ordner(frisch=True)
-    text = (f"Doppelte Dateien im Archiv: {verschoben} nach .duplikate verschoben ({groesse_text(weg_bytes)}), "
+    text = (f"Doppelte Dateien im Archiv: {verschoben} in den Papierkorb {PAPIERKORB}/Duplikate verschoben "
+            f"({groesse_text(weg_bytes)}), "
             f"von jedem Inhalt bleibt genau eine Datei." + (f" {fehler} ließen sich nicht verschieben." if fehler else ""))
     return {"meldung": text, "verschoben": verschoben, "bytes": weg_bytes}
 
@@ -310,8 +313,8 @@ def fotos_zaehlen(pfad, archiv, frist=15.0):
 
 
 def import_api(app, pfad, daten):
-    if not app.import_erlaubt:
-        return 403, {"fehler": "Import ist hier nicht freigegeben."}
+    if not import_frei(app):
+        return 403, {"fehler": "Import geht nur an dem Rechner, auf dem bestof.py läuft."}
     laeuft = app.auftrag is not None and app.auftrag.status["laeuft"]
     if pfad == "/api/import/abbrechen":
         if not laeuft:
@@ -339,11 +342,7 @@ def import_api(app, pfad, daten):
         app.auftrag = Auftrag(app, "rueckgaengig", protokoll)
     elif pfad == "/api/duplikate" and daten.get("aktion") == "suchen":
         app.auftrag = Auftrag(app, "duplikate")
-    elif pfad == "/api/duplikate" and daten.get("aktion") == "leeren":
-        anzahl, groesse = papierkorb_inhalt(app)
-        shutil.rmtree(papierkorb(app), ignore_errors=True)
-        return 200, {"meldung": f"Papierkorb geleert: {anzahl} Dateien, {groesse_text(groesse)} frei."}
-    else:
+    else:  # endgültig löschen gibt es über die Weboberfläche nicht – den Papierkorb leert man im Dateimanager
         return 404, {"fehler": "Unbekannt."}
     app.auftrag.start()
     return 200, {"meldung": "Gestartet."}
@@ -354,8 +353,12 @@ def import_seite(app):
              f'{e(os.path.basename(app.archiv.pfad))} kopieren</p></div></div>')
     inhalt = kopf(app, "import", titel)
     if not app.import_erlaubt:
-        inhalt += ('<p class="leer">Import ist nur am eigenen Rechner (HOST=127.0.0.1) oder mit PASSWORT möglich '
-                   '(IMPORT = 1 in bestof.conf).</p>')
+        inhalt += '<p class="leer">Die Seite „Import“ ist ausgeschaltet (IMPORT = 0 in bestof.conf).</p>'
+        return seite("Import – BestOf", inhalt)
+    if not import_frei(app):
+        inhalt += ('<p class="leer">Importieren geht nur an dem Rechner, auf dem bestof.py läuft – dort im Browser '
+                   f'<b>http://localhost:{app.port}</b> öffnen. Die Ordnerwahl zeigt die Laufwerke dieses Rechners; '
+                   'aus dem Heimnetz bleibt sie deshalb gesperrt.</p>')
         return seite("Import – BestOf", inhalt)
     if not os.path.isfile(app.fotosort):
         inhalt += (f'<p class="leer">fotosort.py fehlt: {e(app.fotosort)}. Legen Sie fotosort.py neben bestof.py '
@@ -376,7 +379,7 @@ def import_seite(app):
 <p class="hilfe0">Die Quelle bleibt unverändert. fotosort.py sortiert ähnliche Fotos in Ordner (ergänzt passende
 bestehende), legt zu NEF ein JPG an und kopiert inhaltsgleiche Dateien (gleiche SHA-256-Prüfsumme) nur einmal.
 Danach bleibt im ganzen Archiv von jedem Inhalt genau eine Datei; überzählige kommen in den Papierkorb
-<code>.duplikate</code>.</p></section>
+<code>""" + e(PAPIERKORB) + """/Duplikate</code>.</p></section>
 <section id="lauf" hidden><h2>Fortschritt</h2>
 <p id="phase"></p><progress id="balken" max="1" value="0"></progress>
 <p id="ergebnis" class="ergebnis"></p>
@@ -385,10 +388,11 @@ Danach bleibt im ganzen Archiv von jedem Inhalt genau eine Datei; überzählige 
 <details><summary>Protokoll</summary><pre id="log"></pre></details></section>
 <section><h2>Doppelte Dateien im Archiv</h2>
 <p id="korb" class="leise"></p>
-<div class="knopfzeile"><button class="knopf" id="dupsuchen" type="button">Jetzt prüfen</button>
-<button class="knopf" id="leeren" type="button">Papierkorb leeren</button></div></section>
+<div class="knopfzeile"><button class="knopf" id="dupsuchen" type="button">Jetzt prüfen</button></div>
+<p class="hilfe0">Endgültig gelöscht wird hier nie. Den Papierkorb – weggeworfene Fotos und Duplikate – leeren Sie
+bei Bedarf im Dateimanager: Ordner <code>""" + e(korb_pfad(app)) + """</code>.</p></section>
 </main>"""
-    return seite("Import – BestOf", inhalt, JS_IMPORT)
+    return seite("Import – BestOf", inhalt, f"const KORB={json.dumps(PAPIERKORB)};" + JS_IMPORT)
 
 
 JS_IMPORT = """
@@ -409,7 +413,7 @@ async function oeffnen(p){const r=await fetch('/api/ordner?pfad='+encodeURICompo
   'Gewählt: '+j.pfad+' – '+j.fotos+(j.fotos===1?' Foto':' Fotos')+' direkt hier, Unterordner kommen mit.';
  knoepfe();}
 function knoepfe(){const frei=aktuell&&!aktuell.im_archiv&&aktuell.lesbar;
- $('start').disabled=laeuft||!frei;$('zaehlen').disabled=!frei;$('dupsuchen').disabled=laeuft;$('leeren').disabled=laeuft;}
+ $('start').disabled=laeuft||!frei;$('zaehlen').disabled=!frei;$('dupsuchen').disabled=laeuft;}
 function gb(b){return b>=1e9?(b/1e9).toFixed(1).replace('.',',')+' GB':(b/1e6).toFixed(1).replace('.',',')+' MB';}
 $('pfadform').addEventListener('submit',ev=>{ev.preventDefault();oeffnen($('pfad').value);});
 $('zaehlen').addEventListener('click',async()=>{$('zahl').textContent='Zähle …';
@@ -429,11 +433,10 @@ $('rueck').addEventListener('click',async()=>{
  const [ok,j]=await post('/api/import/rueckgaengig',{});if(!ok){meldung(j.fehler||'Nicht möglich.',true);return;}abfragen();});
 $('dupsuchen').addEventListener('click',async()=>{const [ok,j]=await post('/api/duplikate',{aktion:'suchen'});
  if(!ok){meldung(j.fehler||'Nicht möglich.',true);return;}abfragen();});
-$('leeren').addEventListener('click',async()=>{if(!confirm('Papierkorb .duplikate endgültig löschen?'))return;
- const [ok,j]=await post('/api/duplikate',{aktion:'leeren'});meldung(ok?j.meldung:(j.fehler||'Nicht möglich.'),!ok);abfragen();});
 async function abfragen(){clearTimeout(zeitgeber);let j;
  try{const r=await fetch('/api/import/status');j=await r.json();}catch(_){zeitgeber=setTimeout(abfragen,3000);return;}
- $('korb').textContent=j.korb[0]?'Im Papierkorb .duplikate: '+j.korb[0]+' Dateien, '+gb(j.korb[1])+'.':'Papierkorb .duplikate ist leer.';
+ $('korb').textContent=(j.korb[0]?'Im Papierkorb '+KORB+': '+j.korb[0]+' Dateien, '+gb(j.korb[1])+'.':'Der Papierkorb '+KORB+' ist leer.')+
+  (j.korb[2]?' Dazu aus früheren Versionen im Ordner .duplikate: '+j.korb[2]+' Dateien, '+gb(j.korb[3])+'.':'');
  const a=j.auftrag;laeuft=!!(a&&a.laeuft);knoepfe();
  if(!a){$('lauf').hidden=true;return;}
  $('lauf').hidden=false;$('abbrechen').hidden=!laeuft;
