@@ -23,7 +23,7 @@ auch selbst aufrufen – dann müssen Sie fotosort.py nicht von Hand starten.
 
 **bestof.py** – Weboberfläche im Browser (Paket `fotolese/web/`)
 - je Ordner bis zu 3 beste Fotos mit Stern ☆ markieren → Kopie in `Sortiert/BestOf`
-- Index mit Datum, Ort und Gesichtern; Filter wie `2023, Leipzig, Anna`
+- Index mit Datum, Ort und Gesichtern; Filter wie `2023, Leipzig, Anna` ([mehr](#filter))
 - Gesichter benennen; lernt aus Ihren Korrekturen (`bestof.conf`)
 - Alben: jedes Foto in beliebig vielen Alben, sichtbar unter dem Foto, im Filter nutzbar ([mehr](#alben))
 - „Alle Fotos“, „Ohne Album“ und Jahr per Klick: das Archiv durchgehen, Alben und Jahre schnell zuordnen
@@ -113,6 +113,48 @@ ist die Seite gesperrt, weil die Ordnerwahl die Laufwerke dieses Rechners zeigt.
 ganz ab.
 `IMPORT_JOBS` legt fest, wie viele Prozesse fotosort.py beim Import nutzt (HDD/USB: z. B. 2–4).
 
+### Filter
+
+Das Suchfeld oben auf jeder Seite filtert das ganze Archiv (dafür braucht es den Index, `INDEX = 1`,
+Standard). Begriffe mit Komma trennen; die Chips unter dem Feld zeigen, wie bestof.py jeden Begriff
+verstanden hat. Die Treffer stehen nach Datum, 240 je Seite, Fotos ohne Datum am Ende. Groß- und
+Kleinschreibung spielt keine Rolle.
+
+| Eingabe | zeigt |
+|---|---|
+| `2023` | Fotos aus 2023 – ein von Hand gesetztes Jahr zählt vor EXIF und Dateiname |
+| `Juli`, auch `Jul`, `Mär`, `Okt` … | diesen Monat in jedem Jahr |
+| `Juli 2023` oder `2023-07` | Juli 2023 |
+| `ohne Jahr` | Fotos ohne Datum |
+| `Jahr korrigiert` | Fotos, deren Jahr von Hand gesetzt ist |
+| `Leipzig` | Fotos höchstens `NAEHE_KM` (Standard 15 km) von Leipzig – über die GPS-Daten |
+| `Anna`, `Person 7` | Fotos mit dieser Person (Name oder Nummer einer unbenannten Gruppe) |
+| `Urlaub 2023` oder `Album Urlaub 2023` | Fotos in diesem Album |
+| `ohne Album` | Fotos, die in keinem Album sind |
+| `0012` | Ordner 0012 |
+| `Alle Fotos` | das ganze Archiv |
+| anderer Text, z. B. `IMG_45` | Fotos, deren Dateiname diesen Text enthält |
+
+Kombiniert wird so:
+- **verschiedene Arten müssen alle zutreffen:** `2023, Leipzig, Anna` = aus 2023, bei Leipzig und mit Anna;
+- **gleiche Art heißt „eines davon“:** `2022, 2023`, `Leipzig, Dresden` oder `Urlaub, Familie`;
+- **Personen müssen alle auf dem Foto sein:** `Anna, Ben` zeigt nur Fotos mit beiden.
+
+Mehrere Wörter ohne Komma gelten einzeln, wenn jedes für sich ein Begriff ist (`Juli 2023`); sonst zählt
+der ganze Text – als Album, Person oder Ort, und wenn nichts davon passt, als Teil des Dateinamens.
+
+Mit einem Klick: „Alle Fotos“ und „Ohne Album“ neben dem Suchfeld (siehe
+[Alle Fotos und Jahr per Klick](#alle-fotos-und-jahr-per-klick)); ein Album unter einem Foto anklicken
+zeigt alle Fotos darin. Auf der Ordner-Übersicht filtern „Alle“, „Ohne Stern“ und „Mit Stern“ ganze
+Ordner, das Feld „Ordner“ öffnet einen Ordner über seine Nummer.
+
+Gut zu wissen:
+- Ist das Jahr eines Fotos von Hand gesetzt, gilt sein Monat als unbekannt – `Juli` findet es dann nicht.
+- Ordnernummern von 1900 bis 2099 versteht der Filter als Jahr: `2005` zeigt das Jahr 2005. Solche Ordner
+  öffnet das Feld „Ordner“ auf der Übersicht.
+- Die Ortssuche im Umkreis braucht die Ortsdaten von GeoNames, die bestof.py beim ersten Start lädt. Ohne
+  sie findet ein Ort nur Fotos, für die der Index genau diesen Ortsnamen kennt.
+
 ### Alben
 
 Ein Foto kann in beliebig vielen Alben stehen, z. B. in „Urlaub 2023“ und „Familie“. Unter jedem Foto
@@ -127,11 +169,11 @@ stehen seine Alben; ein Klick darauf zeigt alle Fotos des Albums.
 3. **Einzeln zuordnen** – ohne gewähltes Album öffnet ＋ unter einem Foto (oder „Alben“ in der Lupe) die
    Liste aller Alben zum Ankreuzen; dort lässt sich auch gleich ein neues anlegen.
 
-Filtern: `Album Urlaub 2023` oder nur `Urlaub 2023`; mehrere Alben mit Komma zeigen die Fotos aus
-einem davon, kombiniert mit anderem gilt beides (`Urlaub 2023, Anna`). `ohne Album` (oder der Knopf
-„Ohne Album“ neben „Filtern“) zeigt, was noch nirgends einsortiert ist. Auf der Seite „Alben“ lassen sich Alben umbenennen und löschen – die Fotos
-bleiben dabei im Archiv. Die Alben stehen im Index (`Sortiert/.bestof-index.sqlite3`), so wie Namen und
-Korrekturen: Wer ihn löscht, verliert sie.
+[Filtern](#filter): `Album Urlaub 2023` oder nur `Urlaub 2023`; mehrere Alben mit Komma zeigen die Fotos
+aus einem davon, kombiniert mit anderem gilt beides (`Urlaub 2023, Anna`). `ohne Album` (oder der Knopf
+„Ohne Album“ neben „Filtern“) zeigt, was noch nirgends einsortiert ist. Auf der Seite „Alben“ lassen sich
+Alben umbenennen und löschen – die Fotos bleiben dabei im Archiv. Die Alben stehen im Index
+(`Sortiert/.bestof-index.sqlite3`), so wie Namen und Korrekturen: Wer ihn löscht, verliert sie.
 
 ### Alle Fotos und Jahr per Klick
 
