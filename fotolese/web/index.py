@@ -384,13 +384,20 @@ class Indexer(threading.Thread):
             self.rechner[r["rechner"]] += 1
         if r.get("rueckfall") and r["rueckfall"] != self.rueckfall:
             self.rueckfall = r["rueckfall"]
-            self.meldung(f"GPU-Fehler, ein Prozess rechnet jetzt auf der CPU: {self.rueckfall}")
+            hinweis = (" – belegt ein anderes Programm die Grafikkarte, z. B. ComfyUI? Abhilfe: GPU_JOBS = 1 oder GPU = 0 "
+                       "in bestof.conf, oder ComfyUI mit --reserve-vram 2 starten" if "GPU-Speicher voll" in self.rueckfall
+                       else "")
+            self.meldung(f"GPU-Fehler, ein Prozess rechnet jetzt auf der CPU: {self.rueckfall}{hinweis}")
 
     def _verarbeiten(self, todo):
         ctx = mp.get_context("spawn")
         app = self.app
         args = (*self.modelle, app.erkenn_px, app.min_gesicht, app.vorschau.ordner, app.gesicht_score, app.gegenprobe)
         wahl = self.gpu if self.gpu and self.gpu.get("kennung") else None
+        if wahl and app.verbesserer and app.verbesserer.beschaeftigt():
+            # ComfyUI rechnet (z. B. noch die Kolorierung): Grafikkarte nicht anfassen, die neuen Bilder liest die CPU
+            wahl = None
+            self.meldung("ComfyUI rechnet gerade – neue Bilder liest der Index auf der CPU, die Grafikkarte bleibt frei.")
         rest, verdacht = list(todo), []
         while rest and not self._stopp:
             fertig, puffer = set(), []

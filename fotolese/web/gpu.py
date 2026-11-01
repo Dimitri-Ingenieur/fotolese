@@ -402,13 +402,17 @@ def _grund(text, fehler=None):
     unten = alles.lower()
     if "insufficient" in unten and "driver" in unten:
         return "Grafiktreiber zu alt für diese CUDA-Version"
-    if "out of memory" in unten:
-        return "GPU-Speicher voll"
+    if re.search(r"out of memory|resource allocation failed|alloc_failed|failed to allocate|memoryallocation", unten):
+        return "GPU-Speicher voll"  # z. B. CUBLAS failure 3, wenn ComfyUI die Grafikkarte belegt
     if isinstance(fehler, _Grund):
         return str(fehler)
+    m = re.search(r"\b(CUBLAS|CUDA|CUDNN|cuDNN|cuBLAS) failure (\d+): ([^;\n]+)", alles)
+    if m:  # ONNX Runtime: lange Ausnahme mit Quelltextstellen – nur die Ursache
+        return f"{m.group(1)}-Fehler {m.group(2)}: {m.group(3).strip()}"
     zeilen = [z.strip() for z in text.splitlines() if re.search(r"error|fail", z, re.I)]
     kurz = zeilen[-1] if zeilen else (f"{type(fehler).__name__}: {fehler}" if fehler else "unbekannter Fehler")
-    return re.sub(r"^\[[^\]]*\]\s*", "", kurz)[-200:]
+    kurz = re.sub(r"^\[[^\]]*\]\s*", "", kurz)
+    return kurz if len(kurz) <= 200 else "… " + kurz[-199:].split(" ", 1)[-1]  # nicht mitten im Wort abschneiden
 
 
 def _cuda_hinweis(grund):

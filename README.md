@@ -402,6 +402,13 @@ Einstellungen (in `bestof.conf` oder als Umgebungsvariable):
   zusammen sind sie am schnellsten. Jeder GPU-Prozess belegt eigenen GPU-Speicher; bei einer großen
   Karte lohnt ein höherer Wert.
 
+**ComfyUI auf derselben Grafikkarte:** Solange bestof.py ein Foto über ComfyUI verbessert oder koloriert,
+liest der Index neue Bilder auf der CPU. Hält ComfyUI seine Modelle auch danach im GPU-Speicher, kann eine
+GPU-Sitzung des Index mit „GPU-Speicher voll“ scheitern (im Terminal von ONNX Runtime als „CUBLAS failure 3:
+the resource allocation failed“); der betroffene Prozess rechnet dann auf der CPU weiter, verloren geht nichts.
+Abhilfe, wenn es oft vorkommt: `GPU_JOBS = 1` oder `GPU = 0` in `bestof.conf`, oder ComfyUI mit
+`--reserve-vram 2` starten (hält 2 GB für andere Programme frei).
+
 Auf der CPU bleiben das Lesen der Fotos, die Vorschaubilder und fotosort.py – dort geht die Zeit ins
 Lesen und Dekodieren der Dateien, nicht ins Rechnen. TensorRT und MIGraphX nutzt bestof.py nicht: Sie
 übersetzen das Netz für jede neue Bildgröße neu.

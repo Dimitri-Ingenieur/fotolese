@@ -302,8 +302,13 @@ def letzter_umzug(app):
 
 
 def _entfernt_text(prot):
-    n = len(prot["entfernt"])
-    return "" if not n else (", 1 leerer Ordner entfernt" if n == 1 else f", {n} leere Ordner entfernt")
+    """Welche Ordner danach leer waren und verschwunden sind (nur leere Ordner, nie Fotos)."""
+    namen = sorted(prot["entfernt"])
+    if not namen:
+        return ""
+    if len(namen) == 1:
+        return f", Ordner {namen[0]} war danach leer und ist entfernt"
+    return f", {len(namen)} leere Ordner entfernt ({', '.join(namen[:6])}{' …' if len(namen) > 6 else ''})"
 
 
 def _leer_entfernen(ordner):
