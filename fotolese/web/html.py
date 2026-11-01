@@ -66,6 +66,19 @@ button,input{font:inherit;color:inherit}
 .seiten span[aria-current]{background:var(--text);color:var(--umfeld);border-color:var(--text)}
 .leer{padding:40px 16px;color:var(--leise);max-width:60ch}
 .filter{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:14px 16px 0}
+.knopf[aria-pressed=true]{border-color:var(--stift);color:var(--stift)}
+.waehlen .raster .kachel{cursor:pointer}.waehlen .raster .kachel .bild{opacity:.7}
+.kachel.markiert .bild{opacity:1!important;outline:3px solid var(--stift);outline-offset:-3px;position:relative}
+.kachel.markiert .bild::after{content:"✓";position:absolute;top:6px;right:8px;background:var(--stift);color:var(--umfeld);
+ border-radius:999px;width:24px;height:24px;display:grid;place-items:center;font-weight:700}
+.wahlleiste{position:sticky;bottom:0;z-index:8;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 16px;
+ background:var(--lupe);border-top:1px solid var(--linie)}.wahlleiste span{flex:1 1 14em;min-width:0}
+.zdialog{position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.6);display:grid;place-items:center;padding:16px}
+.zbox{background:var(--umfeld);border:1px solid var(--linie);width:min(680px,100%);max-height:100%;overflow:auto;padding:16px 18px}
+.zbox h2{margin:0 0 8px;font-size:20px}.zbox h3{font-size:15px;margin:14px 0 4px}.zliste{font-family:var(--zahl);margin:4px 0}
+.zziel{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.zziel select{padding:4px 8px;background:var(--flaeche);
+ border:1px solid var(--linie);color:var(--text);font:inherit}
+.vorschlaege{padding-left:18px;margin:6px 0}.vorschlaege li{margin:6px 0}.vorschlaege .leise{margin:2px 0}
 .filter .chip{border:1px solid var(--linie);padding:3px 10px;border-radius:999px;font-size:13px}
 /* Kontaktbogen */
 .titel{display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap}
@@ -222,6 +235,19 @@ kbd{font-family:var(--zahl);border:1px solid var(--linie);padding:0 5px;border-r
 .import progress{width:100%;height:10px;accent-color:var(--stift)}
 .ergebnis{white-space:pre-line}.ergebnis.fehler{color:var(--fehler)}
 .import pre{max-height:40vh;overflow:auto;font-size:12px;background:var(--lupe);padding:10px;white-space:pre-wrap}
+.einst{max-width:900px}.einst>section{min-width:0}.einst code,.titel .pfad{overflow-wrap:anywhere}.ezeile{display:grid;grid-template-columns:minmax(12em,17em) 1fr;gap:2px 14px;padding:8px 0;
+ border-bottom:1px solid var(--flaeche)}.ezeile label{padding-top:6px}.ezeile .hilfe0{grid-column:2;margin:2px 0 0}
+.eingabe{display:flex;gap:6px;align-items:center;min-width:0}.eingabe .wert{min-width:0}
+.eingabe input[type=text],.eingabe select,.eingabe textarea{padding:5px 8px;background:var(--flaeche);color:var(--text);
+ border:1px solid var(--linie);border-radius:2px;font:inherit;font-size:15px}
+.eingabe input[inputmode=decimal]{width:7em;font-family:var(--zahl)}.eingabe input[type=text]:not([inputmode]){flex:1}
+.eingabe select{max-width:100%}.eingabe textarea{flex:1;resize:vertical}.eingabe .wert:disabled{opacity:.6}
+.schalter{display:inline-flex;gap:6px;align-items:center;padding-top:4px}
+.equelle{white-space:nowrap;border:1px solid var(--linie);border-radius:999px;padding:0 7px;margin-left:4px;font-size:12px}
+.ehinweis:not(:empty){display:block;color:var(--stift)}.warn{color:var(--stift)}
+.wfliste ul{list-style:none;padding:0;margin:6px 0;font-size:14px}.wfliste li{padding:3px 0}
+.wfliste li.fehler{color:var(--fehler)}.planliste{font-size:14px;margin:6px 0;padding-left:18px}
+@media (max-width:640px){.ezeile{grid-template-columns:1fr}.ezeile .hilfe0{grid-column:1}.ezeile label{padding-top:0}}
 .lernstand{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin:12px 16px 0;font-size:13px;
   color:var(--leise)}
 .pruefleiste{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 16px;
@@ -285,6 +311,15 @@ function meldung(text,fehler,aktion){meldungEl.textContent=text;meldungEl.classL
 async function post(url,daten){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
  body:JSON.stringify(daten||{})});let j={};try{j=await r.json();}catch(_){j={fehler:'Server antwortet nicht.'};}
  return [r.ok,j];}
+// Umzug (Ordner zusammengefasst): Meldung nach dem Seitenwechsel, mit „Rückgängig“
+async function auftragWarten(){for(;;){await new Promise(r=>setTimeout(r,400));let j;
+ try{j=await (await fetch('/api/gruppieren')).json();}catch(_){continue;}if(j.auftrag&&!j.auftrag.laeuft)return j.auftrag;}}
+async function umzugZurueck(){const [ok,j]=await post('/api/gruppieren',{aktion:'rueckgaengig'});
+ if(!ok){meldung(j.fehler||'Nicht möglich.',true);return;}meldung('Wird zurückgenommen …');const a=await auftragWarten();
+ try{sessionStorage.setItem('bestofMeldung',JSON.stringify({text:a.fehler||a.ergebnis,fehler:!!a.fehler}));}catch(_){}
+ location.href='/';}
+try{const m=JSON.parse(sessionStorage.getItem('bestofMeldung')||'null');sessionStorage.removeItem('bestofMeldung');
+ if(m)setTimeout(()=>meldung(m.text,!!m.fehler,m.rueck?['Rückgängig',umzugZurueck]:null),50);}catch(_){}
 const statusEl=document.querySelector('.status');
 async function statusHolen(){try{const r=await fetch('/api/status');const j=await r.json();
  statusEl.textContent=j.text;if(j.laeuft)setTimeout(statusHolen,3000);}catch(_){}}
@@ -292,6 +327,84 @@ if(statusEl&&statusEl.dataset.laeuft==='1')setTimeout(statusHolen,2000);
 """
 
 JS_UEBERSICHT = """
+const $=id=>document.getElementById(id);
+function zahl(n){return String(n).replace(/\\B(?=(\\d{3})+(?!\\d))/g,'.');}
+function bilderText(n){return n===1?'1 Bild':zahl(n)+' Bilder';}
+// Ordner zusammenfassen: Ordner anklicken (Umschalt = Bereich), Vorschau, Analyse mit fotosort, Ausführen
+const zk=$('zusammen'),wl=$('wahlleiste'),zd=$('zdialog'),kacheln=[...document.querySelectorAll('.raster .kachel')];
+let wahl=false,letzte=-1,anaId=null,anaTimer=null;const gew=new Set();
+const NAMEN={SCHWELLE:'Bildvergleich',SERIE_SEK:'Serie: Zeitabstand',SERIE_SCHWELLE:'Serie: Abstand'};
+function liste(){return [...gew].sort();}
+function waehlen(an){wahl=an&&!!kacheln.length;document.body.classList.toggle('waehlen',wahl);wl.hidden=!wahl;
+ zk.setAttribute('aria-pressed',wahl);if(!wahl){gew.clear();letzte=-1;}zeigen();}
+function zeigen(){kacheln.forEach(k=>k.classList.toggle('markiert',gew.has(k.dataset.o)));const l=liste();
+ $('wahltext').textContent=l.length?l.length+' Ordner gewählt: '+l.join(', '):'Ordner anklicken, die zusammengehören (Umschalt = Bereich).';
+ $('zstart').disabled=l.length<2;}
+if(zk)zk.addEventListener('click',()=>waehlen(!wahl));
+if(wl){$('zende').addEventListener('click',()=>waehlen(false));$('zstart').addEventListener('click',dialogAuf);
+ $('zziel').addEventListener('change',vorschauHolen);$('zab').addEventListener('click',dialogZu);$('zok').addEventListener('click',zusammenfassen);
+ zd.addEventListener('click',ev=>{if(ev.target===zd)dialogZu();});}
+document.addEventListener('keydown',ev=>{if(ev.key!=='Escape')return;if(zd&&!zd.hidden)dialogZu();else if(wahl)waehlen(false);});
+kacheln.forEach((k,i)=>k.addEventListener('click',ev=>{if(!wahl)return;ev.preventDefault();const o=k.dataset.o;
+ if(o==='0000'){meldung('Den Sammelordner 0000 bitte nicht zusammenfassen – er gehört den Einzelbildern.',true);return;}
+ if(ev.shiftKey&&letzte>=0){const an=!gew.has(o);for(let x=Math.min(letzte,i);x<=Math.max(letzte,i);x++){
+   const ox=kacheln[x].dataset.o;if(ox!=='0000'){if(an)gew.add(ox);else gew.delete(ox);}}}
+ else if(gew.has(o))gew.delete(o);else gew.add(o);letzte=i;zeigen();}));
+function dialogAuf(){const l=liste();if(l.length<2)return;zd.hidden=false;$('zok').disabled=false;
+ $('zziel').replaceChildren(...l.map(o=>new Option(o,o)));$('zziel').value=l[0];$('zliste').textContent=l.join(' · ');
+ $('zinfo').textContent='';vorschauHolen();analyseStarten(l);$('zziel').focus();}
+function dialogZu(){zd.hidden=true;clearTimeout(anaTimer);if(anaId)post('/api/gruppieren',{aktion:'abbrechen',id:anaId});anaId=null;}
+async function vorschauHolen(){const [ok,j]=await post('/api/gruppieren',{aktion:'vorschau',ordner:liste(),ziel:$('zziel').value});
+ if(!ok){$('zinfo').textContent=j.fehler||'';return;}
+ $('zliste').textContent=j.ordner.map(x=>x.ordner+' ('+bilderText(x.bilder)+(x.sterne?', '+x.sterne+' ★':'')+')').join(' · ');
+ let t=bilderText(j.bilder)+(j.bilder===1?' kommt':' kommen')+' nach '+j.ziel+' (dort schon '+bilderText(j.ziel_bilder)+'), die anderen Ordner verschwinden. '+
+  'Verbesserte Fassungen, Begleitdateien, Sterne, Alben, Jahr und Gesichter wandern mit.';
+ if(j.umbenannt)t+=' '+j.umbenannt+(j.umbenannt===1?' Aufnahme bekommt':' Aufnahmen bekommen')+' einen Laufindex, weil der Name im Ziel schon vorkommt (z. B. IMG_0001_1.JPG).';
+ if(j.sterne_weg)t+=' Höchstens '+j.max_best+' Sterne je Ordner: '+j.sterne_weg+' entfallen.';
+ $('zinfo').textContent=t;}
+async function analyseStarten(l){clearTimeout(anaTimer);const box=$('zanalyse');box.replaceChildren(absatz('fotosort vergleicht die Fotos …','leise'));
+ const [ok,j]=await post('/api/gruppieren',{aktion:'analyse',ordner:l});
+ if(!ok){box.replaceChildren(absatz(j.fehler||'Analyse nicht möglich.','leise'));return;}anaId=j.id;analyseAbfragen();}
+async function analyseAbfragen(){const id=anaId;if(!id)return;let r;
+ try{r=(await (await fetch('/api/gruppieren?id='+encodeURIComponent(id))).json()).rechnungen[id];}catch(_){}
+ if(id!==anaId)return;
+ if(!r||r.laeuft){if(r)$('zanalyse').replaceChildren(absatz('fotosort vergleicht die Fotos: '+r.phase+
+   (r.gesamt?' – '+zahl(r.fertig)+' von '+zahl(r.gesamt):'')+' …','leise'));anaTimer=setTimeout(analyseAbfragen,600);return;}
+ anaId=null;if(r.fehler){$('zanalyse').replaceChildren(absatz('Analyse: '+r.fehler,'leise'));return;}analyseZeigen(r.ergebnis);}
+function absatz(text,klasse){const p=document.createElement('p');p.textContent=text;if(klasse)p.className=klasse;return p;}
+function wertText(n,w){return n==='SERIE_SEK'?String(w).replace('.',',')+' s':String(w);}
+function analyseZeigen(a){const box=$('zanalyse'),teile=[];
+ if(a.vergleichbar<2)teile.push(absatz('Zu wenig vergleichbare Fotos für eine Aussage.'));
+ else if(a.teile===1)teile.push(absatz('Mit den jetzigen Werten wären sie schon eine Gruppe. fotosort legt beim Import aber '+
+  'bestehende Ordner nie zusammen – sie kamen wohl in verschiedenen Importen. Zusammenfassen erledigt das.'));
+ else{teile.push(absatz('Mit den jetzigen Werten hätte fotosort sie in '+a.teile+' Gruppen aufgeteilt. Eine dieser Änderungen hätte genügt:'));
+  const ul=document.createElement('ul');ul.className='vorschlaege';
+  for(const v of a.vorschlaege){const li=document.createElement('li'),kopf=document.createElement('b');
+   kopf.textContent=NAMEN[v.name]+' ('+v.name+'): ';li.append(kopf);
+   if(v.wert===null){li.append('nicht möglich – '+v.grund+'.');ul.append(li);continue;}
+   li.append(wertText(v.name,v.wert)+' statt '+wertText(v.name,a.jetzt[v.name])+' ');
+   const b=document.createElement('button');b.type='button';b.className='knopf klein';b.textContent='Übernehmen';
+   b.title='In den Einstellungen speichern – gilt für künftige Importe und „Neu gruppieren“';
+   b.addEventListener('click',async()=>{const [ok,j]=await post('/api/einstellungen',{werte:{[v.name]:v.wert}});
+    meldung(ok?j.meldung+' Gilt für künftige Importe.':(j.fehler||'Speichern fehlgeschlagen.'),!ok);if(ok)b.disabled=true;});
+   li.append(b);
+   li.append(absatz('Engste Stelle: '+v.paar[0]+' ↔ '+v.paar[1]+' (Abstand '+v.abstand+(v.sekunden!=null?', '+String(v.sekunden).replace('.',',')+' s':'')+').','leise'));
+   const f=v.folgen||{};let ft='';
+   if(f.zu_hoch)ft='So hoch, dass auch viele unähnliche Fotos zusammenkämen – eher nicht übernehmen.';
+   else if(v.folgen){const t=[];if(f.n_mit)t.push('käme mit dazu: '+f.mit.slice(0,6).join(', ')+(f.n_mit>6?' …':''));
+    t.push(f.zusammen?(f.zusammen===1?'1 weitere Zusammenlegung':zahl(f.zusammen)+' weitere Zusammenlegungen')+' im Archiv'+
+     (f.beispiele.length?' (z. B. '+f.beispiele.slice(0,3).map(b=>b.slice(0,4).join(' + ')+(b.length>4?' …':'')).join('; ')+')':''):
+     'sonst ändert sich im Archiv nichts');ft='Folgen bei „Neu gruppieren“: '+t.join(', ')+'.';}
+   if(ft)li.append(absatz(ft,'leise'));ul.append(li);}
+  teile.push(ul);}
+ if(a.n_nicht)teile.push(absatz(a.n_nicht+(a.n_nicht===1?' Foto ist':' Fotos sind')+' einfarbig oder nicht lesbar – die ordnet fotosort nie automatisch zu.','leise'));
+ box.replaceChildren(...teile);}
+async function zusammenfassen(){const l=liste(),ziel=$('zziel').value;$('zok').disabled=true;
+ const [ok,j]=await post('/api/gruppieren',{aktion:'zusammenfassen',ordner:l,ziel});
+ if(!ok){meldung(j.fehler||'Zusammenfassen nicht möglich.',true);$('zok').disabled=false;return;}
+ meldung('Wird zusammengefasst …');const a=await auftragWarten();
+ try{sessionStorage.setItem('bestofMeldung',JSON.stringify({text:a.fehler||a.ergebnis,fehler:!!a.fehler,rueck:!a.fehler}));}catch(_){}
+ location.href='/o/'+ziel;}
 const nb=document.getElementById('neuaufbau');
 if(nb)nb.addEventListener('click',async()=>{
  if(!confirm('BestOf aus den gespeicherten Sternen neu aufbauen? Fehlende Kopien werden ergänzt, veraltete entfernt.'))return;
@@ -701,7 +814,8 @@ const VW=D.verbessern||[],FARBE=D.kolorieren,farbWahl=lupe.querySelector('.farbw
  trenner=lupe.querySelector('.trenner'),vLabels=[...lupe.querySelectorAll('.vlabel')],vStatus=lupe.querySelector('.vstatus');
 let vergleich=false,vAnteil=50,vZiehen=false,vTimer=null;const vJobs={};  // Auftrag -> {i, t0, s}
 wfWahl.replaceChildren(...VW.map(w=>new Option(w.name,w.datei)));
-try{const m=localStorage.getItem('bestofWorkflow');if(m&&VW.some(w=>w.datei===m))wfWahl.value=m;}catch(_){}
+if(D.vorwahl&&VW.some(w=>w.datei===D.vorwahl))wfWahl.value=D.vorwahl;  // Einstellungen: fester Workflow
+else try{const m=localStorage.getItem('bestofWorkflow');if(m&&VW.some(w=>w.datei===m))wfWahl.value=m;}catch(_){}
 wfWahl.addEventListener('change',()=>{try{localStorage.setItem('bestofWorkflow',wfWahl.value);}catch(_){}verbLupe();});
 if(FARBE){let m=FARBE.standard;try{m=localStorage.getItem('bestofFarbe')||m;}catch(_){}farbWahl.value=m;}
 farbWahl.addEventListener('change',()=>{try{localStorage.setItem('bestofFarbe',farbWahl.value);}catch(_){}verbLupe();});
@@ -840,6 +954,7 @@ def kopf(app, aktiv="", inhalt_titel="", suchtext=""):
     if app.index:
         navi.append(("alben", "/alben", "Alben"))
         navi.append(("personen", "/personen", "Personen"))
+    navi.append(("einstellungen", "/einstellungen", "Einstellungen"))
     links = "".join(f'<a href="{url}"{" aria-current=page" if k == aktiv else ""}>{t}</a>' for k, url, t in navi)
     suche = ""
     if app.index:
@@ -1118,7 +1233,8 @@ def ordner_seite(app, ordner):
           "zurueck": f"/o/{zurueck}" if zurueck else None, "weiter": f"/o/{weiter}" if weiter else None,
           "offen": f"/weiter/{ordner}", "uebersicht": f"/?seite={seite_nr}",
           "alben": alben_liste(app.index) if app.index else None,
-          "verbessern": app.verbesserer.fuer_seite() if app.verbesserer else [], "kolorieren": farb_daten(app)}
+          "verbessern": app.verbesserer.fuer_seite() if app.verbesserer else [], "kolorieren": farb_daten(app),
+          "vorwahl": app.verbesserer.vorwahl if app.verbesserer else ""}
     inhalt += f'<script type="application/json" id="daten">{json_im_html(js)}</script>'
     return seite(f"{ordner} – BestOf", inhalt, JS_BOGEN + JS_ALBEN + JS_VERBESSERN)
 
@@ -1158,7 +1274,8 @@ def such_seite(app, text, seite_nr):
           "auswahl": {o: [url_id(m) for m in app.auswahl.markiert(o)] for o in ordner_menge},
           "ziele": {o: {url_id(m): z for m, z in app.auswahl.ziele(o).items()} for o in ordner_menge},
           "alben": alben_liste(app.index) if app.index else None, "suche": text.strip() or None, "treffer": gesamt,
-          "verbessern": app.verbesserer.fuer_seite() if app.verbesserer else [], "kolorieren": farb_daten(app)}
+          "verbessern": app.verbesserer.fuer_seite() if app.verbesserer else [], "kolorieren": farb_daten(app),
+          "vorwahl": app.verbesserer.vorwahl if app.verbesserer else ""}
     inhalt += f'<script type="application/json" id="daten">{json_im_html(js)}</script>'
     return seite(f"{text} – BestOf", inhalt, JS_BOGEN + JS_ALBEN + JS_VERBESSERN)
 
@@ -1327,6 +1444,17 @@ def gruppe_pruefen_seite(app, pid):
     return seite(f"{name} prüfen – BestOf", inhalt, JS_PRUEFEN)
 
 
+ZUSAMMEN_HTML = """<div class="wahlleiste" id="wahlleiste" hidden><span id="wahltext"></span>
+<button class="knopf haupt" id="zstart" type="button" disabled>Zusammenfassen …</button>
+<button class="knopf" id="zende" type="button">Fertig</button></div>
+<div class="zdialog" id="zdialog" hidden role="dialog" aria-modal="true" aria-labelledby="ztitel"><div class="zbox">
+<h2 id="ztitel">Ordner zusammenfassen</h2><p id="zliste" class="zliste"></p>
+<label class="zziel">Alle Fotos kommen nach <select id="zziel"></select></label><p id="zinfo" class="leise"></p>
+<section class="zanalyse"><h3>Welche Ähnlichkeit hätte gereicht?</h3><div id="zanalyse"></div></section>
+<div class="knopfzeile"><button class="knopf haupt" id="zok" type="button">Zusammenfassen</button>
+<button class="knopf" id="zab" type="button">Abbrechen</button></div></div></div>"""
+
+
 def uebersicht(app, filt, seite_nr):
     alle = app.archiv.ordner()
     gewaehlt = app.auswahl.mit_auswahl()
@@ -1357,7 +1485,7 @@ def uebersicht(app, filt, seite_nr):
         bild = (f'<img loading="lazy" decoding="async" src="/t/{o}/{url_id(titelbild[0])}?v={titelbild[2]}" alt="">'
                 if titelbild else "")
         wann = ", ".join(t for t in zusammen.get(o, []) if t)
-        kacheln.append(f'<a class="kachel{" gewaehlt" if markiert else ""}" href="/o/{o}">'
+        kacheln.append(f'<a class="kachel{" gewaehlt" if markiert else ""}" href="/o/{o}" data-o="{o}">'
                        f'<div class="bild">{bild}</div><div class="zeile"><span class="nr">{o}</span>'
                        f'<span class="leise">{bilder_text(len(bilder))}</span>{sterne_svg(len(markiert))}</div>'
                        f'<span class="leise wann">{e(wann)}</span></a>')
@@ -1373,7 +1501,9 @@ def uebersicht(app, filt, seite_nr):
                  f'{filterlink("ohne", "Ohne Stern", len(alle) - n_mit)}{filterlink("mit", "Mit Stern", n_mit)}</nav>'
                  f'<form class="springen" action="/springen"><input name="o" inputmode="numeric" pattern="[0-9]*" '
                  f'maxlength="4" placeholder="Ordner" aria-label="Ordnernummer"><button class="knopf">Öffnen</button></form>'
-                 f'<button class="knopf rechts" id="neuaufbau" type="button">BestOf neu aufbauen</button></div>')
+                 f'<button class="knopf rechts" id="zusammen" type="button" aria-pressed="false" title="Ordner mit '
+                 f'ähnlichen Fotos auswählen und zu einem zusammenfassen">Ordner zusammenfassen</button>'
+                 f'<button class="knopf" id="neuaufbau" type="button">BestOf neu aufbauen</button></div>')
     if not alle:
         hauptteil = (f'<p class="leer">Keine Ordner 0001–9999 gefunden in {e(app.archiv.pfad)}. '
                      f'Prüfen Sie den Pfad beim Start.</p>')
@@ -1382,7 +1512,7 @@ def uebersicht(app, filt, seite_nr):
             '<p class="leer">Noch keine Sterne. Öffnen Sie einen Ordner und markieren Sie bis zu ' \
             f'{bilder_text(app.auswahl.max_best)} mit ☆ – sie landen in BestOf.</p>'
     else:
-        hauptteil = f'<main class="raster">{"".join(kacheln)}</main>'
+        hauptteil = f'<main class="raster">{"".join(kacheln)}</main>' + ZUSAMMEN_HTML
     nav = seiten_nav(seite_nr, seiten, lambda n: f"/?filter={filt}&seite={n}")
     quelle = ('<p class="quelle">Ortsnamen: GeoNames (CC BY 4.0). Gesichtserkennung lokal mit YuNet und SFace '
               '(OpenCV Zoo).</p>' if app.index else "")

@@ -189,6 +189,39 @@ def _bilder_im_archiv(app, pfade):
     return list(dict.fromkeys(ergebnis))
 
 
+def gruppen_umgebung(app, werte=None):
+    """Ähnlichkeitswerte für fotosort (Import, Neu-Gruppierung, Analyse) – aus den Einstellungen oder werte."""
+    w = dict(app.gruppe, **(werte or {}))
+    return {"SCHWELLE": str(int(w["SCHWELLE"])), "SERIE_SEK": f"{float(w['SERIE_SEK']):g}",
+            "SERIE_SCHWELLE": str(int(w["SERIE_SCHWELLE"])), "EINZELN": str(w["EINZELN"])}
+
+
+def fotosort_lauf(app, argumente, umgebung, status, halter, text_zeile=None, json_zeile=None):
+    """fotosort.py als Unterprozess. Fortschritt (#FS-Zeilen mit „titel“) kommt nach status, andere #FS-Zeilen
+    an json_zeile, die übrige Ausgabe zeilenweise an text_zeile. halter.proc ist der Prozess (zum Abbrechen).
+    Rückgabe: Exit-Code."""
+    env = dict(os.environ, **umgebung, JA="1", FORTSCHRITT_JSON="1", PYTHONUNBUFFERED="1")
+    halter.proc = subprocess.Popen([sys.executable, "-u", app.fotosort, *argumente], stdout=subprocess.PIPE,
+                                   stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=env, text=True,
+                                   encoding="utf-8", errors="replace", bufsize=1)
+    for zeile in halter.proc.stdout:
+        zeile = zeile.rstrip("\n")
+        if zeile.startswith("#FS "):
+            try:
+                d = json.loads(zeile[4:])
+            except ValueError:
+                continue
+            if "titel" in d:
+                status.update(phase=d.get("titel", ""), fertig=d.get("fertig", 0), gesamt=d.get("gesamt", 0),
+                              zusatz=d.get("zusatz", ""))
+            elif json_zeile:
+                json_zeile(d)
+            continue
+        if text_zeile:
+            text_zeile(zeile)
+    return halter.proc.wait()
+
+
 class Auftrag(threading.Thread):
     """Import (fotosort.py, Modus copy, mit Duplikatprüfung), Rückgängig oder Duplikatsuche – einer zur Zeit.
     Mit album kommen alle Fotos eines Imports in dieses Album, auch die schon vorhandenen gleichen Inhalts."""
@@ -209,35 +242,25 @@ class Auftrag(threading.Thread):
         self.status["log"] = (self.status["log"] + [text])[-400:]
 
     def _fotosort(self, argumente, umgebung):
-        env = dict(os.environ, **umgebung, JA="1", FORTSCHRITT_JSON="1", PYTHONUNBUFFERED="1")
-        self.proc = subprocess.Popen([sys.executable, "-u", self.app.fotosort, *argumente], stdout=subprocess.PIPE,
-                                     stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=env, text=True,
-                                     encoding="utf-8", errors="replace", bufsize=1)
-        for zeile in self.proc.stdout:
-            zeile = zeile.rstrip("\n")
-            if zeile.startswith("#FS "):
-                try:
-                    d = json.loads(zeile[4:])
-                except ValueError:
-                    continue
-                if "doppelt" in d:
-                    self.doppelt.append(d["doppelt"])
-                    continue
-                self.status.update(phase=d.get("titel", ""), fertig=d.get("fertig", 0), gesamt=d.get("gesamt", 0),
-                                   zusatz=d.get("zusatz", ""))
-                continue
+        def json_zeile(d):
+            if "doppelt" in d:
+                self.doppelt.append(d["doppelt"])
+
+        def text_zeile(zeile):
             if zeile.startswith("Protokoll: ") and self.art == "import":
                 self.status["protokoll"] = zeile[11:].strip()
             if zeile.strip():
                 self._zeile(zeile)
-        return self.proc.wait()
+
+        return fotosort_lauf(self.app, argumente, umgebung, self.status, self, text_zeile, json_zeile)
 
     def run(self):
         app, st = self.app, self.status
         try:
             if self.art == "import":
                 code = self._fotosort([self.ziel, app.archiv.pfad],
-                                      {"MODUS": "copy", "DUPLIKATE": "1", "JOBS": str(app.import_jobs)})
+                                      {"MODUS": "copy", "DUPLIKATE": "1", "JOBS": str(app.import_jobs),
+                                       **gruppen_umgebung(app)})
                 wichtig = [z for z in st["log"] if z.startswith(("Gefunden:", "Duplikate:", "Gruppen:", "Ergänzt:",
                                                                  "JPG aus NEF:", "Fertig in", "Alle Bilder sind",
                                                                  "Keine Bilder", "Nichts zu", "Abbruch", "ABGEBROCHEN"))]
@@ -536,7 +559,7 @@ async function abfragen(){clearTimeout(zeitgeber);let j;
  const a=j.auftrag;laeuft=!!(a&&a.laeuft);knoepfe();
  if(!a){$('lauf').hidden=true;return;}
  $('lauf').hidden=false;$('abbrechen').hidden=!laeuft;
- const titel={import:'Import',rueckgaengig:'Rückgängig',duplikate:'Duplikatsuche'}[a.art];
+ const titel={import:'Import',rueckgaengig:'Rückgängig',duplikate:'Duplikatsuche',zusammenfassen:'Zusammenfassen',gruppieren:'Neu gruppieren',umzug_rueck:'Umzug rückgängig'}[a.art]||a.art;
  $('phase').textContent=titel+(a.ziel&&a.art==='import'?' von '+a.ziel:'')+
   (a.album&&a.art==='import'?' ins Album „'+a.album+'“':'')+': '+a.phase+
   (a.gesamt?' – '+a.fertig+' von '+a.gesamt:'')+(a.zusatz?' · '+a.zusatz:'');

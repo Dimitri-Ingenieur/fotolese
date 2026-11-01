@@ -10,12 +10,14 @@ import signal
 import warnings
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from concurrent.futures.process import BrokenProcessPool
+from datetime import datetime
 
 import numpy as np
 from PIL import Image, ImageFile
 
-from fotolese.sort.konst import DRAFT, _DREHUNG
-from fotolese.sort.exif import _exif_meta
+from fotolese.sort.konst import DRAFT, _DREHUNG, _EPOCHE
+from fotolese.sort.exif import _exif_meta, _zeit_aus_name
+from fotolese.sort.bericht import Fortschritt
 
 
 def _dct_matrix(n):
@@ -169,3 +171,38 @@ def analyse_parallel(auftraege, jobs, ablegen):
         gebrochen, _ = _runde([a], 1, _ablegen, fertig)
         if gebrochen and a[0] not in fertig:
             _ablegen(a[0], "Absturz beim Lesen – Datei vermutlich defekt")
+
+
+def analysieren(bilder, cache, jobs):
+    """Hashes, Zeit und Kamera je Bild – aus dem Cache oder parallel neu – und die Sortierzeit t_sort
+    (EXIF, sonst Dateiname, sonst Änderungszeit). Rückgabe: wie viele aus dem Cache kamen."""
+    offen = []
+    for i, d in enumerate(bilder):
+        d.res = cache.holen(d.pfad, d.groesse, d.mtime)
+        if d.res is None:
+            offen.append(i)
+    fort = Fortschritt("Analyse", len(offen))
+    zaehler = [0]
+
+    def ablegen(i, res):
+        d = bilder[i]
+        d.res = res
+        if isinstance(res, list):
+            cache.ablegen(d.pfad, d.groesse, d.mtime, res)
+        zaehler[0] += 1
+        fort.melden(zaehler[0])
+
+    if offen:
+        analyse_parallel([(i, bilder[i].pfad) for i in offen], min(jobs, len(offen)), ablegen)
+        fort.melden(len(offen), ende=True)
+    for d in bilder:
+        t_exif = d.res[4] if d.ok else None
+        if t_exif is None:
+            t_exif = _zeit_aus_name(os.path.basename(d.pfad))
+        if t_exif is None:
+            try:
+                t_exif = (datetime.fromtimestamp(d.mtime / 1e9) - _EPOCHE).total_seconds()
+            except (OverflowError, OSError, ValueError):
+                t_exif = 0.0
+        d.t_sort = t_exif
+    return len(bilder) - len(offen)

@@ -25,9 +25,20 @@ Aufruf (Conda):
   python fotosort.py EINGABE AUSGABE
   MODUS=test python fotosort.py EINGABE AUSGABE      # nur Plan, nichts bewegen
   MODUS=undo python fotosort.py AUSGABE/fotosort_<zeit>.csv
+  MODUS=gruppen python fotosort.py AUSGABE           # Plan: ganzes Archiv neu gruppieren
+  MODUS=analyse python fotosort.py AUSGABE 0004 0005 # welche Werte hätten diese Ordner zusammengebracht?
+
+Nachträglich gruppieren (beide Modi planen nur, verschoben wird nichts):
+  gruppen  gruppiert alle Bilder direkt in AUSGABE/0000–9999 mit den Werten unten, als kämen sie in einem Import.
+           Jede Gruppe behält den Ordner mit den meisten ihrer Bilder, Dateien gleichen Namens (JPG+NEF) bleiben
+           beisammen, einfarbige und unlesbare bleiben liegen. Der Plan (JSON) kommt nach PLAN, sonst nach
+           AUSGABE/fotosort_gruppen_<zeit>.json. Ausführen in bestof.py (Einstellungen → Neu gruppieren): dort
+           wandern Sterne, Alben, Jahr, Gesichter und verbesserte Fassungen mit, Rückgängig ist möglich.
+  analyse  nennt je Wert (SCHWELLE, SERIE_SEK, SERIE_SCHWELLE) den kleinsten, mit dem fotosort die Bilder der
+           Ordner beim Import in eine Gruppe gelegt hätte, und was der Wert sonst im Archiv zusammenlegen würde.
 
 Umgebungsvariablen (Standard in Klammern):
-  MODUS           (move)   move | copy | link | test | undo
+  MODUS           (move)   move | copy | link | test | undo | gruppen | analyse
                            link = Vorschau mit symbolischen Links (nur Linux-Dateisysteme)
   JA              (0)      1 = ohne Rückfrage ausführen
   SCHWELLE        (20)     Bildvergleich: max. Abstand pHash+dHash (0–128)
@@ -43,6 +54,7 @@ Umgebungsvariablen (Standard in Klammern):
   FORTSCHRITT_JSON (0)     1 = Fortschritt als Zeilen „#FS {json}“ auf stdout (für bestof.py)
   CACHE           (~/.cache/fotosort/cache.sqlite3)  Pfad oder 0 = aus
                            merkt sich auch die Bilder im Bestand: Folgeläufe lesen sie nicht neu
+  PLAN            ()       MODUS=gruppen: Datei für den Plan
 
 Pakete: pillow numpy rawpy (rawpy optional, für NEF empfohlen; Conda: Kanal conda-forge)
 """
@@ -55,15 +67,15 @@ from collections import Counter
 from datetime import datetime
 
 from fotolese.gemein import _env
-from fotolese.sort.konst import MAX_ORDNER, VERSION, WINDOWS_FS, _EPOCHE, rawpy
-from fotolese.sort.bericht import Fortschritt, dauer, gb, info, json_zeile, zahl
-from fotolese.sort.exif import _zeit_aus_name
-from fotolese.sort.bild import analyse_parallel
+from fotolese.sort.konst import MAX_ORDNER, VERSION, WINDOWS_FS, rawpy
+from fotolese.sort.bericht import dauer, gb, info, json_zeile, zahl
+from fotolese.sort.bild import analysieren
 from fotolese.sort.cache import Cache
 from fotolese.sort.suche import ordne_begleitdateien, suche, suche_bestand
 from fotolese.sort.gruppe import duplikate_finden, finde_anker, gruppiere
 from fotolese.sort.plan import dateisystem, hoechste_nummer, plane
 from fotolese.sort.lauf import Protokoll, ausfuehren, bestaetigen, leere_ordner_entfernen, rueckgaengig
+from fotolese.sort.neu import neu_main
 
 
 def main():
@@ -80,14 +92,12 @@ def main():
         print(__doc__)
         return 0
     modus = _env("MODUS", "move").lower()
-    if modus not in ("move", "copy", "link", "test", "undo"):
-        sys.exit(f"Fehler: MODUS={modus!r} – erlaubt: move, copy, link, test, undo")
+    if modus not in ("move", "copy", "link", "test", "undo", "gruppen", "analyse"):
+        sys.exit(f"Fehler: MODUS={modus!r} – erlaubt: move, copy, link, test, undo, gruppen, analyse")
     if modus == "undo":
         if len(args) != 1:
             sys.exit("Aufruf: MODUS=undo python fotosort.py AUSGABE/fotosort_<zeit>.csv")
         return rueckgaengig(os.path.abspath(args[0]))
-    if len(args) != 2:
-        sys.exit("Aufruf: python fotosort.py EINGABE AUSGABE   (Hilfe: -h)")
 
     schwelle = _env("SCHWELLE", 20, int)
     serie_sek = _env("SERIE_SEK", 3.0, float)
@@ -95,7 +105,14 @@ def main():
     einzeln = _env("EINZELN", "ordner").lower()
     if einzeln not in ("ordner", "0000"):
         sys.exit("Fehler: EINZELN muss 'ordner' oder '0000' sein.")
+    if not (0 <= schwelle <= 128 and 0 <= serie_schwelle <= 128 and serie_sek >= 0):
+        sys.exit("Fehler: SCHWELLE und SERIE_SCHWELLE liegen zwischen 0 und 128, SERIE_SEK ist nicht negativ.")
     jobs = max(1, _env("JOBS", os.cpu_count() or 1, int))
+    if modus in ("gruppen", "analyse"):
+        cache_pfad = os.path.expanduser(_env("CACHE", "~/.cache/fotosort/cache.sqlite3"))
+        return neu_main(modus, args, schwelle, serie_sek, serie_schwelle, einzeln, jobs, cache_pfad)
+    if len(args) != 2:
+        sys.exit("Aufruf: python fotosort.py EINGABE AUSGABE   (Hilfe: -h)")
     begleit_an = _env("BEGLEIT", "1") != "0"
     aufraeumen = _env("AUFRAEUMEN", "1") != "0"
     nef_jpg_an = _env("NEF_JPG", "1") != "0"
@@ -157,42 +174,12 @@ def main():
             info("Alle Bilder sind schon im Archiv – nichts zu tun.")
             return 0
     alle_bilder = bilder + bestand
-    offen = []
-    for i, d in enumerate(alle_bilder):
-        d.res = cache.holen(d.pfad, d.groesse, d.mtime)
-        if d.res is None:
-            offen.append(i)
-    treffer = len(alle_bilder) - len(offen)
-    fort = Fortschritt("Analyse", len(offen))
-    zaehler = [0]
-
-    def ablegen(i, res):
-        d = alle_bilder[i]
-        d.res = res
-        if isinstance(res, list):
-            cache.ablegen(d.pfad, d.groesse, d.mtime, res)
-        zaehler[0] += 1
-        fort.melden(zaehler[0])
-
     try:
-        if offen:
-            analyse_parallel([(i, alle_bilder[i].pfad) for i in offen], min(jobs, len(offen)), ablegen)
-            fort.melden(len(offen), ende=True)
+        treffer = analysieren(alle_bilder, cache, jobs)
     except KeyboardInterrupt:
         cache.schliessen()
         sys.exit("\nAbgebrochen während der Analyse – nichts verschoben. Bisherige Ergebnisse sind im Cache.")
     info(f"Analyse:  {dauer(time.time() - t0)} (aus Cache: {zahl(treffer)})")
-
-    for d in alle_bilder:
-        t_exif = d.res[4] if d.ok else None
-        if t_exif is None:
-            t_exif = _zeit_aus_name(os.path.basename(d.pfad))
-        if t_exif is None:
-            try:
-                t_exif = (datetime.fromtimestamp(d.mtime / 1e9) - _EPOCHE).total_seconds()
-            except (OverflowError, OSError, ValueError):
-                t_exif = 0.0
-        d.t_sort = t_exif
     defekt = [d for d in bilder if not d.ok]
     abgeschnitten = sum(1 for d in bilder if d.ok and d.res[6])
 

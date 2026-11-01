@@ -157,7 +157,16 @@ def zurueckholen(app, schluessel):
     return 200, {"meldung": f"{anzeige(paare[0][0])} ist zurück in Ordner {o}."}
 
 
+def umzug_laeuft(app):
+    """Werden gerade Ordner zusammengefasst oder neu gruppiert? Dann warten Papierkorb und Verbessern."""
+    a = getattr(app, "auftrag", None)
+    return a is not None and a.status.get("laeuft") and a.status.get("art") in ("zusammenfassen", "gruppieren",
+                                                                                  "umzug_rueck")
+
+
 def papierkorb_api(app, daten):
+    if umzug_laeuft(app):
+        return 409, {"fehler": "Gerade werden Ordner umsortiert – bitte einen Moment warten."}
     if daten.get("rueck") is not None:
         return zurueckholen(app, daten["rueck"])
     return wegwerfen(app, daten.get("pfad"))

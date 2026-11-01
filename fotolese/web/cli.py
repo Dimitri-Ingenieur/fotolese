@@ -55,9 +55,21 @@ Verbessern (ComfyUI, z. B. auf demselben Rechner, Port 8188):
   Kolorierung (braucht ffmpeg): „+ Kolorierung“ färbt nach der Restaurierung in einem zweiten Lauf ein, „wenn S/W“
   nur Schwarzweiß und Sepia; dazu optional Farbhinweise. Ergebnis <Name>_<Workflow>_koloriert.png – Helligkeit und
   Details aus der Restaurierung (Luma-Lock), nur die Farbe aus dem zweiten Lauf.
+Ordner zusammenfassen (Übersicht, Knopf „Ordner zusammenfassen“):
+  Ordner anklicken (Umschalt = Bereich), „Zusammenfassen …“: alle Fotos kommen in den Zielordner (vorgewählt die
+  kleinste Nummer: 0004, 0005, 0006 -> 0004), samt NEF, Begleitdateien und verbesserten Fassungen; gleiche Namen
+  bekommen einen Laufindex. Sterne, Alben, Jahr und Gesichter wandern mit; „Rückgängig“ in der Meldung. Der Dialog
+  nennt, mit welchem Wert (SCHWELLE, SERIE_SEK, SERIE_SCHWELLE) fotosort die Fotos beim Import selbst
+  zusammengelegt hätte und was der Wert sonst zusammenlegen würde; „Übernehmen“ speichert ihn.
+Einstellungen (Seite „Einstellungen“):
+  Ähnlichkeit beim Import, Workflows (Vorwahl, eigener für die Kolorierung, hochladen), Kolorierung, Anzeige,
+  Personen, Import – geschrieben in bestof.conf, gültig sofort. „Neu gruppieren“ gruppiert dort das ganze Archiv
+  mit den Werten neu: erst Vorschau, dann ausführen, „Letzten Umzug rückgängig“ stellt alles wieder her
+  (Protokoll in SORTIERT/.bestof-umzug/). ComfyUI-Adresse und Hochladen nur an diesem Rechner.
 Heimnetz:
   bestof.py lauscht auf allen Netzwerken: vom Tablet, Handy oder anderen Rechner http://<Rechnername>:8765,
-  z. B. http://tigris:8765 (Name und IP stehen in der Startausgabe). Alles geht von dort – außer Importieren.
+  z. B. http://tigris:8765 (Name und IP stehen in der Startausgabe). Alles geht von dort – außer Importieren,
+  der ComfyUI-Adresse und dem Hochladen von Workflows.
   PASSWORT schützt die Seiten; HOST = 127.0.0.1 = nur dieser Rechner. Firewall: Port 8765 freigeben.
 Ordneransicht: unter jedem Foto Auflösung, Dateigröße und – falls vorhanden – Größe der NEF-Datei;
   die höchste Auflösung im Ordner ist gelb markiert.
@@ -68,7 +80,7 @@ Alben (Seite „Alben“: anlegen, umbenennen, löschen):
   Ordner bzw. alle Treffer des Filters. Ohne gewähltes Album öffnet ＋ die Liste aller Alben zum Ankreuzen.
   Gespeichert im Index; doppelte Dateien geben ihre Alben an die behaltene Datei weiter.
 Einstellungen und Lernen (bestof.conf neben bestof.py, wird beim ersten Start angelegt):
-  NAME = Wert je Zeile; Umgebungsvariablen haben Vorrang. Jede Korrektur einer automatischen Zuordnung
+  NAME = Wert je Zeile; Umgebungsvariablen haben Vorrang. Die Seite „Einstellungen“ ändert die meisten Werte. Jede Korrektur einer automatischen Zuordnung
   (Gesicht „Thomas“ ist in Wahrheit „Paul“) und jede Bestätigung (Schild anklicken + Enter, „Ausgewählte
   bestätigen“) ist ein Label. Nach LERNEN_AB Korrekturen stellt bestof.py PERSON_SCHWELLE und ABSTAND so ein,
   dass diese Fehler nicht wieder passieren, ohne bestätigte Gesichter zu verlieren, schreibt sie in bestof.conf
@@ -117,9 +129,15 @@ Umgebungsvariablen (Standard in Klammern):
   BESTOF_CONF (bestof.conf neben dem Skript)  andere Einstellungsdatei
   IMPORT     (1)           0 = Seite „Import“ aus; sonst nur an diesem Rechner (nie aus dem Heimnetz)
   IMPORT_JOBS (Kerne/2)    parallele Prozesse für fotosort beim Import (HDD/USB: z. B. 2–4)
+  SCHWELLE   (20)          Ähnlichkeit für fotosort (Import, Neu gruppieren): max. Abstand pHash+dHash (0–128)
+  SERIE_SEK  (3)           Serienbilder: max. Sekunden zum Nachbarbild derselben Kamera …
+  SERIE_SCHWELLE (36)      … und max. Abstand
+  EINZELN    (ordner)      Einzelbilder: ordner = je eigener Ordner, 0000 = alle in Ordner 0000
   FOTOSORT   (fotosort.py neben bestof.py)
   COMFYUI    (http://127.0.0.1:8188)  ComfyUI für „Verbessern“; 0 = aus
   WORKFLOWS  (workflows neben bestof.py)  Ordner mit Workflows im API-Format (ComfyUI: Export (API))
+  VERBESSERN_WORKFLOW ()   in der Lupe vorgewählter Workflow (Dateiname); leer = der zuletzt gewählte
+  FARBE_WORKFLOW ()        eigener Workflow für die Kolorierung; leer = derselbe wie beim Verbessern
   COLORIZE_DEFAULT (off)   Kolorierung vorgewählt: off | on | auto (nur monochrome Fotos)
   COLORIZE_RESTORE_LORA (0)  Restore-LoRA im zweiten Lauf: 0 = aus, 0.3–0.5 bei Farbsäumen
   COLORIZE_LUMA_LOCK (1)   0 = Bild des zweiten Laufs ohne Luma-Lock übernehmen
@@ -152,6 +170,7 @@ import sqlite3
 import sys
 import threading
 import webbrowser
+from collections import OrderedDict
 from http.server import ThreadingHTTPServer
 
 from fotolese.web import konfig
@@ -268,7 +287,14 @@ def main(skript_ordner=None):
     app.fotosort = os.path.abspath(os.path.expanduser(_env("FOTOSORT", os.path.join(
         basis, "fotosort.py"))))
     app.import_jobs = max(1, _env("IMPORT_JOBS", app.index_jobs, int))
+    einzeln = _env("EINZELN", "ordner").lower()
+    app.gruppe = {"SCHWELLE": min(128, max(0, _env("SCHWELLE", 20, int))),  # Ähnlichkeit für fotosort
+                  "SERIE_SEK": min(86400.0, max(0.0, _env("SERIE_SEK", 3.0, float))),
+                  "SERIE_SCHWELLE": min(128, max(0, _env("SERIE_SCHWELLE", 36, int))),
+                  "EINZELN": einzeln if einzeln in ("ordner", "0000") else "ordner"}
     app.auftrag = None
+    app.rechnungen, app.rechnungen_lock = OrderedDict(), threading.Lock()  # Analyse und Plan (fotosort)
+    app.umzug_sperre = threading.Lock()  # Umzug läuft: der Index liest das Archiv erst danach
     app.erkenn_px = max(320, _env("ERKENN_PX", 1920, int))
     app.min_gesicht = max(8, _env("MIN_GESICHT", 48, int))
     app.gesicht_score = min(0.99, max(0.3, _env("GESICHT_SCORE", 0.50, float)))
@@ -284,7 +310,10 @@ def main(skript_ordner=None):
                             _env("COLORIZE_LUMA_LOCK", "1") != "0", _env("COLORIZE_CHROMA_BLUR", 0.0, float),
                             _env("COLORIZE_MONO_THRESHOLD", 10.0, float), _env("COLORIZE_PROMPT", ""),
                             _env("COLORIZE_KEEP_RAW", "0") != "0")
-    app.verbesserer = None if comfyui == "0" else Verbesserer(app, comfyui, workflow_ordner, farbe)
+    vorwahl, farb_workflow = _env("VERBESSERN_WORKFLOW", ""), _env("FARBE_WORKFLOW", "")
+    app.verbesserer = (None if comfyui == "0" else
+                       Verbesserer(app, comfyui, workflow_ordner, farbe, vorwahl=vorwahl, farb_workflow=farb_workflow))
+    app.workflow_ordner = workflow_ordner
     app.index, app.indexer = None, None
     if _env("INDEX", "1") != "0":
         try:

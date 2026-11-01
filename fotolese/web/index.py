@@ -336,27 +336,28 @@ class Indexer(threading.Thread):
     def durchlauf(self):
         app = self.app
         self.status["phase"] = "Suche neue Bilder"
-        auf_platte = {}
-        for o in app.archiv.ordner(frisch=True):
-            for name, groesse, mt in app.archiv.bilder(o, frisch=True):
-                auf_platte[f"{o}/{url_id(name)}"] = (o, name, groesse, mt)
-        im_index = {r[0]: r[1:] for r in self.index.q("SELECT pfad, groesse, mtime, gesichter, fehler FROM bild")}
-        if not auf_platte and im_index:  # Festplatte abgezogen oder Ordner unlesbar: nichts löschen
-            if not getattr(self, "_archiv_weg", False):
-                self.meldung("Archiv nicht erreichbar – Index bleibt unverändert.")
-            self._archiv_weg = True
-            return
-        self._archiv_weg = False
-        weg = [p for p in im_index if p not in auf_platte]
-        if weg:
-            with self.index.lock:
-                db = self.index.db
-                for p in weg:
-                    self._personen_abziehen(db, db.execute("SELECT id, person, emb FROM gesicht WHERE pfad=?",
-                                                           (p,)).fetchall())
-                    db.execute("DELETE FROM gesicht WHERE pfad=?", (p,))
-                    db.execute("DELETE FROM bild WHERE pfad=?", (p,))
-                db.commit()
+        with app.umzug_sperre:  # nicht mitten in einem Umzug: Dateien schon verschoben, Index noch nicht
+            auf_platte = {}
+            for o in app.archiv.ordner(frisch=True):
+                for name, groesse, mt in app.archiv.bilder(o, frisch=True):
+                    auf_platte[f"{o}/{url_id(name)}"] = (o, name, groesse, mt)
+            im_index = {r[0]: r[1:] for r in self.index.q("SELECT pfad, groesse, mtime, gesichter, fehler FROM bild")}
+            if not auf_platte and im_index:  # Festplatte abgezogen oder Ordner unlesbar: nichts löschen
+                if not getattr(self, "_archiv_weg", False):
+                    self.meldung("Archiv nicht erreichbar – Index bleibt unverändert.")
+                self._archiv_weg = True
+                return
+            self._archiv_weg = False
+            weg = [p for p in im_index if p not in auf_platte]
+            if weg:
+                with self.index.lock:
+                    db = self.index.db
+                    for p in weg:
+                        self._personen_abziehen(db, db.execute("SELECT id, person, emb FROM gesicht WHERE pfad=?",
+                                                               (p,)).fetchall())
+                        db.execute("DELETE FROM gesicht WHERE pfad=?", (p,))
+                        db.execute("DELETE FROM bild WHERE pfad=?", (p,))
+                    db.commit()
         todo = []
         for rel, (o, name, groesse, mt) in auf_platte.items():
             alt = im_index.get(rel)

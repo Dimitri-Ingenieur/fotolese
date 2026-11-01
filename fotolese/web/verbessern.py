@@ -34,6 +34,7 @@ from PIL import Image, ImageOps, PngImagePlugin
 from fotolese.web.konst import KOLORIERT, ORDNER_MUSTER, VERBESSERT
 from fotolese.web.konfig import anzeige, name_aus_id, url_id
 from fotolese.web.kolorieren import MAX_HINWEIS, MODI, FarbFehler, farb_ziele, lora_setzen
+from fotolese.web.papierkorb import umzug_laeuft
 
 FRIST = 3600  # so lange wartet ein Auftrag höchstens auf das Ergebnis (Sekunden)
 MAX_AUFTRAEGE = 200
@@ -269,10 +270,11 @@ def speichern(app, ordner, name, roh, workflow, stamm=None, notiz=None, text_von
 class Auftrag(threading.Thread):
     """Ein Foto mit einem Workflow verbessern: hochladen, in die Warteschlange, warten, abholen, speichern."""
 
-    def __init__(self, verbesserer, ordner, name, workflow, farbe="off", hinweise=""):
+    def __init__(self, verbesserer, ordner, name, workflow, farbe="off", hinweise="", farb_wf=None):
         super().__init__(daemon=True)
         self.v, self.ordner, self.name, self.workflow = verbesserer, ordner, name, workflow
         self.farbe, self.hinweise = farbe, hinweise  # Kolorierung: off/on/auto, Farbhinweise
+        self.farb_wf = farb_wf  # eigener Workflow für Pass 2 (FARBE_WORKFLOW) oder None = derselbe
         self.id = secrets.token_urlsafe(9)
         self.restauriert = None  # Archivname der Fassung aus Pass 1
         self.notizen = []  # fürs Terminal: Streuung, Seed, Fehler der Kolorierung
@@ -384,7 +386,7 @@ class Auftrag(threading.Thread):
 
     def _kolorieren(self):
         """Pass 2: die restaurierte Fassung kolorieren, Luma-Lock, als …_koloriert.png speichern."""
-        app, st, k, w = self.v.app, self.status, self.v.farbe, self.workflow
+        app, st, k, w = self.v.app, self.status, self.v.farbe, self.farb_wf or self.workflow
         ziele = w["farbe"]
         with tempfile.TemporaryDirectory(prefix="fotolese_") as tmp:
             restored = os.path.join(tmp, "restored.png")  # feste Namen: kein „%“ o. Ä. in den ffmpeg-Argumenten
@@ -427,20 +429,32 @@ class Auftrag(threading.Thread):
 
 
 class Verbesserer:
-    def __init__(self, app, comfy_url, workflow_ordner, farbe=None):
+    def __init__(self, app, comfy_url, workflow_ordner, farbe=None, vorwahl="", farb_workflow=""):
         self.app = app
         self.comfy = Comfy(comfy_url)
         self.workflows = Workflows(workflow_ordner)
         self.farbe = farbe if farbe and farbe.bereit else None  # Kolorierung; None ohne ffmpeg
+        self.vorwahl = vorwahl  # VERBESSERN_WORKFLOW: in der Lupe vorgewählt („“ = zuletzt gewählter)
+        self.farb_workflow = farb_workflow  # FARBE_WORKFLOW: Workflow für Pass 2 („“ = derselbe wie Pass 1)
         self.auftraege = OrderedDict()
         self._lock = threading.Lock()
 
+    def farb_wf(self):
+        """Der eigene Workflow für die Kolorierung, wenn eingestellt und brauchbar (mit Prompt-Text), sonst None."""
+        if not self.farb_workflow:
+            return None
+        return next((w for w in self.workflows.brauchbar() if w["datei"] == self.farb_workflow and w["farbe"]), None)
+
     def fuer_seite(self):
-        """Für die Oberfläche: [{"datei", "name", "farbe"}] der brauchbaren Workflows (farbe: kann kolorieren)."""
-        return [{"datei": w["datei"], "name": w["name"], "farbe": bool(self.farbe and w["farbe"])}
+        """Für die Oberfläche: [{"datei", "name", "farbe"}] der brauchbaren Workflows (farbe: kann kolorieren –
+        mit eigenem Kolorier-Workflow jeder, sonst nur einer mit Prompt-Text)."""
+        fw = self.farb_wf()
+        return [{"datei": w["datei"], "name": w["name"], "farbe": bool(self.farbe and (fw or w)["farbe"])}
                 for w in self.workflows.brauchbar()]
 
     def starten(self, pfad, datei, kolorieren=None, hinweise=None):
+        if umzug_laeuft(self.app):
+            return 409, {"fehler": "Gerade werden Ordner umsortiert – bitte einen Moment warten."}
         o, _, uid = str(pfad or "").partition("/")
         name = name_aus_id(uid)
         if not (ORDNER_MUSTER.fullmatch(o) and o in self.app.archiv.ordner() and uid and url_id(name) == uid
@@ -451,12 +465,13 @@ class Verbesserer:
             return 404, {"fehler": "Workflow nicht gefunden – liegt die Datei noch im Ordner workflows? Seite neu laden."}
         modus = kolorieren if kolorieren in MODI else (self.farbe.standard if self.farbe else "off")
         hinweise = str(hinweise or "").strip()
-        if modus != "off" and not (self.farbe and w["farbe"]):
+        fw = self.farb_wf()
+        if modus != "off" and not (self.farbe and (fw or w)["farbe"]):
             return 400, {"fehler": "Kolorierung geht hier nicht – " + ("ffmpeg fehlt." if not self.farbe else
                                                                        f"„{w['name']}“ hat keinen Prompt-Text.")}
         if len(hinweise) > MAX_HINWEIS:
             return 400, {"fehler": f"Farbhinweise höchstens {MAX_HINWEIS} Zeichen."}
-        auftrag = Auftrag(self, o, name, w, modus, hinweise)
+        auftrag = Auftrag(self, o, name, w, modus, hinweise, farb_wf=fw)
         with self._lock:
             self.auftraege[auftrag.id] = auftrag
             while len(self.auftraege) > MAX_AUFTRAEGE:
@@ -467,3 +482,8 @@ class Verbesserer:
     def stand(self, ids):
         with self._lock:
             return {i: dict(self.auftraege[i].status) for i in ids if i in self.auftraege}
+
+    def beschaeftigt(self):
+        """Läuft gerade ein Auftrag? Dann kein Umzug – das Ergebnis käme sonst in einen verschobenen Ordner."""
+        with self._lock:
+            return any(a.status["laeuft"] for a in self.auftraege.values())

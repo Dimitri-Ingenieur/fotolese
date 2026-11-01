@@ -9,7 +9,7 @@ try:
 except ImportError:
     rawpy = None
 
-VERSION = "1.3"
+VERSION = "1.4"
 HASH_VERSION = "1"
 BILD_EXT = {".jpg", ".jpeg", ".png", ".nef"}
 BEGLEIT_EXT = {".xmp", ".pp3", ".aae"}

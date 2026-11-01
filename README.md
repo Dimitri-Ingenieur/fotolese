@@ -18,6 +18,8 @@ auch selbst aufrufen – dann müssen Sie fotosort.py nicht von Hand starten.
 - erzeugt zu jeder NEF-Datei ein JPG
 - übernimmt inhaltsgleiche Dateien (SHA-256) nur einmal
 - schreibt ein Protokoll; `MODUS=undo` macht einen Lauf rückgängig
+- plant eine Neu-Gruppierung des ganzen Archivs (`MODUS=gruppen`) und nennt die Ähnlichkeitswerte, mit denen
+  bestimmte Ordner zusammengekommen wären (`MODUS=analyse`) – ausgeführt wird in bestof.py
 
 **bestof.py** – Weboberfläche im Browser (Paket `fotolese/web/`)
 - je Ordner bis zu 3 beste Fotos mit Stern ☆ markieren → Kopie in `Sortiert/BestOf`
@@ -32,6 +34,11 @@ auch selbst aufrufen – dann müssen Sie fotosort.py nicht von Hand starten.
   ([mehr](#im-heimnetz))
 - Verbessern mit ComfyUI: Workflow wählen, die Fassung kommt in den Unterordner `verbessert`,
   Vorher/Nachher-Schieber in der Lupe; wahlweise danach kolorieren ([mehr](#verbessern-mit-comfyui))
+- Ordner zusammenfassen (z. B. 0004, 0005, 0006 → 0004) und das ganze Archiv mit neuen Ähnlichkeitswerten neu
+  gruppieren – Sterne, Alben, Jahr, Gesichter und Fassungen wandern mit, „Rückgängig“ inklusive; dazu die Werte,
+  mit denen fotosort die Ordner selbst zusammengelegt hätte ([mehr](#ordner-zusammenfassen-und-neu-gruppieren))
+- Seite „Einstellungen“: Ähnlichkeit beim Import, Workflows (auch hochladen), Kolorierung, Anzeige, Personen
+  ([mehr](#einstellungen))
 - Gesichtserkennung auf der Grafikkarte, wenn eine nutzbar ist – NVIDIA, AMD, Intel, Apple ([GPU](#gpu))
 - Seite „Import“: Ordner wählen – bestof.py startet fotosort.py, das ihn ins Archiv kopiert ([mehr](#import-im-browser))
 - doppelte Dateien im Archiv → Papierkorb `Sortiert/Musor/Duplikate`
@@ -160,8 +167,9 @@ und die IP-Adresse; klappt der Name nicht, hilft `http://tigris.local:8765` oder
 (z. B. `http://192.168.178.20:8765`). Blockiert eine Firewall, Port 8765 freigeben, unter Ubuntu
 z. B. `sudo ufw allow 8765/tcp`.
 
-Aus dem Heimnetz geht alles außer dem Import: Fotos ansehen, Sterne, Alben, Jahre, Namen, Papierkorb.
-Importieren geht nur an dem Rechner selbst (`http://localhost:8765`) – bestof.py erkennt das an der
+Aus dem Heimnetz geht alles außer dem Import: Fotos ansehen, Sterne, Alben, Jahre, Namen, Papierkorb,
+Ordner zusammenfassen, Einstellungen. Importieren geht nur an dem Rechner selbst (`http://localhost:8765`),
+ebenso das Ändern der ComfyUI-Adresse und das Hochladen von Workflows – bestof.py erkennt das an der
 Absenderadresse, nicht an einem Passwort. Wer im Heimnetz nicht jedem die Fotos zeigen will, setzt in
 `bestof.conf` ein `PASSWORT` (der Benutzername ist beliebig). `HOST = 127.0.0.1` macht bestof.py wieder
 nur am eigenen Rechner erreichbar, etwa auf einem Laptop in fremden Netzen.
@@ -185,9 +193,10 @@ hat die Lupe den Knopf **✦ Verbessern**:
    den Papierkorb schieben; in der Lupe vergleicht <kbd>V</kbd> sie mit dem Original.
 
 **Workflows:** in ComfyUI den Workflow öffnen, mit „Export (API)“ speichern und die JSON-Datei in den
-Ordner `workflows/` neben `bestof.py` legen (anderer Ort: `WORKFLOWS` in `bestof.conf`). Jede Datei ist
-eine Wahl neben „Verbessern“, der Name kommt aus dem Dateinamen (`Foto_restore_API.json` → „Foto
-restore“). bestof.py setzt das Foto in den Bild-Eingang (`LoadImage` oder ein anderer Knoten mit dem
+Ordner `workflows/` neben `bestof.py` legen (anderer Ort: `WORKFLOWS` in `bestof.conf`) – oder auf der Seite
+[Einstellungen](#einstellungen) mit „Workflow hochladen …“. Jede Datei ist eine Wahl neben „Verbessern“, der
+Name kommt aus dem Dateinamen (`Foto_restore_API.json` → „Foto restore“). Welcher in der Lupe vorgewählt
+ist, legt `VERBESSERN_WORKFLOW` fest (leer = der zuletzt gewählte). bestof.py setzt das Foto in den Bild-Eingang (`LoadImage` oder ein anderer Knoten mit dem
 Eingang `image`; bei mehreren den, in dessen Titel „fotolese“ steht), würfelt den Seed jedes Mal neu
 und holt das Bild des Speicher-Knotens (`Save Image`). Ein Workflow im normalen statt im API-Format
 wird beim Start mit Hinweis übersprungen. Mitgeliefert ist „Foto restore“ (siehe
@@ -216,8 +225,10 @@ Scheitert die Kolorierung, bleibt die Restaurierung erhalten und die Meldung nen
 
 Dafür braucht der Rechner `ffmpeg` (unter Ubuntu `sudo apt install ffmpeg`); fehlt es, bietet bestof.py
 keine Kolorierung an und sagt das beim Start. Kolorieren kann jeder Workflow mit einem Prompt-Text,
-der genau einen Speicher-Knoten hat – der mitgelieferte „Foto restore“ zum Beispiel. Einstellungen in
-`bestof.conf`:
+der genau einen Speicher-Knoten hat – der mitgelieferte „Foto restore“ zum Beispiel. Soll der zweite Lauf
+einen anderen Workflow nehmen als die Restaurierung, legt ihn `FARBE_WORKFLOW` fest; dann geht die
+Kolorierung nach jedem Workflow. Einstellungen in `bestof.conf` oder auf der Seite
+[Einstellungen](#einstellungen):
 
 | Einstellung | Standard | Bedeutung |
 |---|---|---|
@@ -231,6 +242,66 @@ der genau einen Speicher-Knoten hat – der mitgelieferte „Foto restore“ zum
 
 Das Terminal nennt je Auftrag Farbstreuung (bei `auto`), Seed und Ergebnis – damit lässt sich die
 Schwelle einstellen.
+
+### Ordner zusammenfassen und neu gruppieren
+
+fotosort.py legt beim Import ähnliche Fotos in einen Ordner. Was dabei getrennt blieb – etwa weil die
+Fotos in verschiedenen Importen kamen oder sich mehr unterscheiden, als die Einstellungen erlauben –,
+lässt sich nachträglich zusammenführen: von Hand oder für das ganze Archiv.
+
+**Zusammenfassen:** Auf der Übersicht „Ordner zusammenfassen“ klicken, dann die Ordner anklicken, die
+zusammengehören (Umschalt = alle bis zum zuletzt angeklickten), und „Zusammenfassen …“. Der Dialog zeigt,
+was passiert: Alle Fotos kommen in den Zielordner – vorgewählt der mit der kleinsten Nummer, also
+0004, 0005, 0006 → 0004 –, die übrigen Ordner verschwinden. Mit jedem Foto wandern NEF, Begleitdateien
+(`.xmp`, `.pp3`, `.aae`) und die verbesserten Fassungen. Gibt es einen Namen im Ziel schon, bekommt die
+Aufnahme einen Laufindex (`IMG_0001_1.JPG`, die Fassungen passend dazu). Sterne, Alben, ein von Hand
+gesetztes Jahr, Gesichter und Namen bleiben erhalten; mehr Sterne als `MAX_BEST` je Ordner fallen weg –
+das sagt der Dialog vorher. Danach öffnet sich der Zielordner, die Meldung hat „Rückgängig“.
+
+**Welche Ähnlichkeit hätte gereicht?** Im selben Dialog rechnet fotosort.py aus, mit welchem Wert es
+diese Fotos beim Import selbst in eine Gruppe gelegt hätte: je Einstellung der kleinste, der bei sonst
+gleichen Werten genügt – Bildvergleich (`SCHWELLE`), Serie: Zeitabstand (`SERIE_SEK`) oder Serie: Abstand
+(`SERIE_SCHWELLE`). Dazu die engste Stelle (die zwei Fotos, die am schlechtesten zusammenpassen) und die
+Folgen: welche anderen Ordner mit diesem Wert bei „Neu gruppieren“ außerdem zusammenkämen. „Übernehmen“
+speichert den Wert in `bestof.conf`, er gilt für künftige Importe. Werte ab etwa 50 machen fast alle Fotos
+ähnlich – der Dialog warnt davor. Wären die Fotos schon mit den jetzigen Werten eine Gruppe gewesen, sagt
+er auch das: fotosort.py legt beim Import bestehende Ordner nie zusammen, dafür ist Zusammenfassen da.
+
+**Neu gruppieren:** Auf der Seite [Einstellungen](#einstellungen) gruppiert „Neu gruppieren“ das ganze
+Archiv mit den eingestellten Werten neu, als kämen alle Fotos in einem Import. Jede Gruppe behält den
+Ordner, in dem schon die meisten ihrer Fotos liegen; neue Gruppen bekommen Nummern hinter der höchsten,
+einfarbige und unlesbare Fotos bleiben, wo sie sind. Zuerst kommt eine Vorschau – wie viele Fotos wandern,
+welche Ordner zusammenkommen oder geteilt werden –, verschoben wird erst nach „Jetzt neu gruppieren“.
+„Letzten Umzug rückgängig“ stellt den alten Stand wieder her: Dateien, Sterne, Index.
+
+Jeder Umzug steht in `Sortiert/.bestof-umzug/umzug-<Zeit>.json`; zurücknehmen lässt sich der letzte.
+Während eines Umzugs ruhen Import, Verbessern und der Index. Auf der Kommandozeile rechnet fotosort.py
+dasselbe, verschiebt aber nichts:
+
+```bash
+MODUS=analyse python fotosort.py AUSGABE 0004 0005 0006   # welche Werte hätten diese Ordner zusammengebracht?
+MODUS=gruppen python fotosort.py AUSGABE                  # Plan für das ganze Archiv (JSON); ausführen in bestof.py
+```
+
+### Einstellungen
+
+Die Seite „Einstellungen“ zeigt die wichtigsten Werte aus `bestof.conf` und ändert sie; sie gelten sofort.
+
+- **Ähnlichkeit beim Import:** `SCHWELLE`, `SERIE_SEK`, `SERIE_SCHWELLE` und `EINZELN` gibt bestof.py an
+  fotosort.py weiter – beim Import, bei der Analyse und bei „Neu gruppieren“ (darunter auf derselben Seite).
+- **Verbessern mit ComfyUI:** die ComfyUI-Adresse, der in der Lupe vorgewählte Workflow
+  (`VERBESSERN_WORKFLOW`) und ein eigener Workflow für die Kolorierung (`FARBE_WORKFLOW`). Die Liste zeigt
+  jeden Workflow mit seinem Zustand; „Workflow hochladen …“ legt eine JSON-Datei im API-Format in den
+  Ordner `workflows`.
+- **Kolorierung:** die Werte aus der Tabelle oben.
+- **Anzeige, Personen, Import:** Sterne je Ordner, Ordner je Übersichtsseite, Umkreis für den Ortsfilter;
+  Ähnlichkeit für dieselbe Person, Abstand, Lernen; Prozesse für fotosort.py.
+
+„Standard“ neben einem Feld nimmt wieder den eingebauten Wert (die Zeile in `bestof.conf` wird
+auskommentiert). Was eine Umgebungsvariable setzt, hat Vorrang und ist auf der Seite gesperrt. Die
+ComfyUI-Adresse und das Hochladen von Workflows gehen nur am Rechner selbst, nicht aus dem Heimnetz –
+beides bestimmt, was ComfyUI ausführt. Eine ausgeschaltete ComfyUI-Anbindung (`COMFYUI = 0`) kommt erst
+nach einem Neustart wieder.
 
 ## GPU
 
@@ -297,6 +368,7 @@ fotolese/                    Projektordner
 │   │   ├── gruppe.py        Duplikate (SHA-256), Gruppierung, passende Bestandsordner
 │   │   ├── plan.py          Zielnamen mit Laufindex, Verschiebeplan
 │   │   ├── lauf.py          verschieben, kopieren, verlinken; Protokoll; Rückgängig
+│   │   ├── neu.py           Neu-Gruppierung des Archivs (Plan) und Analyse nötiger Werte
 │   │   └── cli.py           main() und Hilfetext (-h)
 │   └── web/                 bestof: durchsehen, filtern, Sterne für BestOf
 │       ├── konst.py         Konstanten, Muster, Monatsnamen, Quellen der Modelle
@@ -317,6 +389,8 @@ fotolese/                    Projektordner
 │       ├── server.py        HTTP-Handler und /api-Aktionen
 │       ├── lernen.py        aus Korrekturen Schwelle und Abstand lernen
 │       ├── importieren.py   Seite „Import“ (nur am Rechner selbst): fotosort.py, Duplikate
+│       ├── gruppieren.py    Ordner zusammenfassen, Plan ausführen, Rückgängig (Umzug mit Index)
+│       ├── einstellungen.py Seite „Einstellungen“, Workflows hochladen
 │       └── cli.py           main() und Hilfetext (-h)
 ├── workflows/               ComfyUI-Workflows (API-Format) für „Verbessern“
 │   └── Foto_restore_API.json  Qwen Image 2.1 Restore (AusBoss)
@@ -331,11 +405,13 @@ fotolese/                    Projektordner
   müssen aber neben dem Ordner `fotolese/` liegen. Wer sie an einen anderen Ort kopiert,
   nimmt `fotolese/` mit – sonst `ModuleNotFoundError: No module named 'fotolese'`.
 - `sort` und `web` importieren sich nicht gegenseitig; gemeinsamer Code liegt in `gemein.py`.
-  Verbunden sind sie nur über den [Import im Browser](#import-im-browser): `web/importieren.py`
-  startet `fotosort.py` mit demselben Python als Unterprozess (`MODUS=copy`, `DUPLIKATE=1`,
-  `JOBS` aus `IMPORT_JOBS`, `JA=1`, `FORTSCHRITT_JSON=1`) und liest dessen Ausgabe mit:
-  `#FS {json}`-Zeilen (aus `sort/bericht.py`) für den Fortschrittsbalken, die Zeile
-  `Protokoll: …` für „Import rückgängig“.
+  Verbunden sind sie nur über Unterprozesse: `web/importieren.py` startet `fotosort.py` mit demselben
+  Python – für den [Import im Browser](#import-im-browser) mit `MODUS=copy`, `DUPLIKATE=1`, `JOBS` aus
+  `IMPORT_JOBS`, für die Analyse und die Vorschau von „Neu gruppieren“ mit `MODUS=analyse` bzw.
+  `MODUS=gruppen` (Plan als JSON in `Sortiert/.bestof-umzug/`), immer mit den Ähnlichkeitswerten aus den
+  Einstellungen, `JA=1` und `FORTSCHRITT_JSON=1`. bestof.py liest die Ausgabe mit: `#FS {json}`-Zeilen (aus
+  `sort/bericht.py`) für Fortschritt und Ergebnisse, die Zeile `Protokoll: …` für „Import rückgängig“.
+  Verschoben wird beim Neu-Gruppieren von `web/gruppieren.py`, damit Sterne, Alben und Index mitwandern.
 
 ## Datenschutz
 

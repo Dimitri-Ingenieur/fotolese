@@ -112,6 +112,42 @@ class Auswahl:
             except OSError:
                 pass
 
+    def umziehen(self, paare):
+        """Sterne mitnehmen, wenn Bilder den Ordner wechseln: paare = [(alter Ordner, alter Name, neuer Ordner,
+        neuer Name)]. Im Zielordner kommen sie hinter die vorhandenen Sterne; über MAX_BEST hinaus fallen sie weg.
+        Rückgabe: Zahl der weggefallenen Sterne."""
+        with self.lock:
+            neu = {}
+            for alt_o, alt_n, neu_o, neu_n in paare:
+                for o in (alt_o, neu_o):
+                    if o not in neu:
+                        neu[o] = self.markiert(o)
+                if alt_n in neu[alt_o]:
+                    neu[alt_o].remove(alt_n)
+                    neu[neu_o].append(neu_n)
+            return self._uebernehmen(neu)
+
+    def setzen(self, stand):
+        """Sterne je Ordner auf einen früheren Stand {Ordner: [Namen]} zurücksetzen (Umzug rückgängig)."""
+        with self.lock:
+            return self._uebernehmen({o: list(namen) for o, namen in stand.items()})
+
+    def _uebernehmen(self, neu):
+        weg = 0
+        for o, liste in neu.items():
+            self.archiv.bilder(o, frisch=True)  # Dateien gerade verschoben: Ordner neu lesen
+            if liste == self.markiert(o) and not liste:
+                continue
+            try:
+                weg += len(liste) - len(self._abgleichen(o, liste))
+            except OSError:
+                pass
+        try:
+            self._speichern()
+        except OSError:
+            pass
+        return weg
+
     def umschalten(self, ordner, name):
         with self.lock:
             alt = self.markiert(ordner)

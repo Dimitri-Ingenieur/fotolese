@@ -4,7 +4,7 @@ import re
 from PIL import Image, ImageFile
 
 
-VERSION = "2.7.1"
+VERSION = "2.8.0"
 BILD_EXT = {".jpg", ".jpeg", ".png"}
 ORDNER_MUSTER = re.compile(r"\d{4}")
 BESTOF_MUSTER = re.compile(r"(\d{4})([a-z]?)\.(jpg|png)")

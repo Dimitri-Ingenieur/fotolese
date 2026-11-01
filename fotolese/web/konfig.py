@@ -21,7 +21,8 @@ from fotolese.web.konst import MONATE
 KONFIG_VORLAGE = """\
 # bestof.conf – Einstellungen für bestof.py. Liegt im selben Ordner wie bestof.py.
 # Format: NAME = Wert. Text nach " #" ist Kommentar; Werte mit # in Anführungszeichen setzen.
-# Umgebungsvariablen haben Vorrang (z. B. PORT=9000 python bestof.py …). Änderungen gelten nach dem Neustart.
+# Umgebungsvariablen haben Vorrang (z. B. PORT=9000 python bestof.py …). Von Hand geändert gilt nach dem Neustart;
+# die Seite „Einstellungen“ ändert die meisten Werte sofort.
 
 # ---- Personen: bestof.py lernt aus Ihren Korrekturen und Bestätigungen ----
 # Die beiden Werte stellt bestof.py selbst nach, sobald LERNEN_AB Fehlzuordnungen korrigiert wurden.
@@ -31,6 +32,12 @@ ABSTAND = 0.00           # so viel ähnlicher als jede andere benannte Person mu
 LERNEN = 1               # 1 = die Werte oben automatisch anpassen, 0 = nie
 LERNEN_AB = 5            # neu lernen nach so vielen korrigierten Fehlzuordnungen
 # NACHZIEHEN = 0.50      # beim Korrigieren wandern sehr ähnliche Gesichter derselben Gruppe mit; 1 = aus
+
+# ---- Ähnlichkeit beim Import und für „Neu gruppieren“ – bestof gibt die Werte an fotosort.py weiter ----
+# SCHWELLE = 20          # Bildvergleich: höchster Abstand pHash+dHash (0–128), höher = mehr kommt zusammen
+# SERIE_SEK = 3          # Serienbilder derselben Kamera: höchstens so viele Sekunden zum Nachbarbild …
+# SERIE_SCHWELLE = 36    # … und höchstens dieser Abstand
+# EINZELN = ordner       # Einzelbilder: ordner = je eigener Ordner, 0000 = alle in Ordner 0000
 
 # ---- Gesichtssuche – eine Änderung durchsucht alle Bilder neu (Namen bleiben) ----
 # GESICHTER = 1          # 0 = keine Gesichtserkennung
@@ -46,6 +53,8 @@ LERNEN_AB = 5            # neu lernen nach so vielen korrigierten Fehlzuordnunge
 # ---- Verbessern mit ComfyUI – siehe README (Abschnitt Verbessern) ----
 # COMFYUI = http://127.0.0.1:8188   # 0 = Knopf „Verbessern“ aus
 # WORKFLOWS = /pfad/zu/workflows      # Standard: workflows neben bestof.py; Workflows im API-Format
+# VERBESSERN_WORKFLOW =               # in der Lupe vorgewählt, z. B. Foto_restore_API.json; leer = zuletzt gewählter
+# FARBE_WORKFLOW =                    # eigener Workflow für die Kolorierung; leer = derselbe wie beim Verbessern
 # Kolorierung (zweiter Lauf nach der Restaurierung, braucht ffmpeg):
 # COLORIZE_DEFAULT = off              # off / on / auto (auto = nur Schwarzweiß und Sepia); in der Lupe änderbar
 # COLORIZE_RESTORE_LORA = 0           # 0 = Restore-LoRA aus; 0.3–0.5 bei Farbsäumen
@@ -80,6 +89,9 @@ LERNEN_AB = 5            # neu lernen nach so vielen korrigierten Fehlzuordnunge
 LERN_SCHLUESSEL = ("PERSON_SCHWELLE", "ABSTAND")
 # Kommentarzeilen früherer Vorlagen, die heute Falsches sagen -> neue Fassung (Werte ändert das nie)
 VORLAGE_ALT = {
+    "# Umgebungsvariablen haben Vorrang (z. B. PORT=9000 python bestof.py …). Änderungen gelten nach dem Neustart.":
+        "# Umgebungsvariablen haben Vorrang (z. B. PORT=9000 python bestof.py …). Von Hand geändert gilt nach dem "
+        "Neustart;\n# die Seite „Einstellungen“ ändert die meisten Werte sofort.",
     "# IMPORT = 1             # 0 = Seite „Import“ aus":
         "# IMPORT = 1             # 0 = Seite „Import“ aus; importieren geht nur an diesem Rechner, nie aus dem Heimnetz",
     "# HOST = 127.0.0.1       # 0.0.0.0 = auch im Heimnetz, dann PASSWORT setzen":
@@ -153,7 +165,8 @@ class Konfig:
         os.replace(tmp, self.pfad)
 
     def setzen(self, neu, notiz=None):
-        """Werte ändern (aktive Zeile, sonst auskommentierte, sonst anhängen) und „# Gelernt:“ erneuern."""
+        """Werte ändern (aktive Zeile, sonst auskommentierte, sonst anhängen) und „# Gelernt:“ erneuern.
+        Wert None = zurück zum Standard: aktive Zeilen werden auskommentiert."""
         if not self.schreibbar:
             return False
         with self.lock:
@@ -164,6 +177,10 @@ class Konfig:
                 zeilen = KONFIG_VORLAGE.splitlines()
             for name, wert in neu.items():
                 aktiv = [i for i, z in enumerate(zeilen) if (self.zerlegen(z) or ("",))[0] == name]
+                if wert is None:
+                    for i in aktiv:
+                        zeilen[i] = "# " + zeilen[i].lstrip()
+                    continue
                 aus = [i for i, z in enumerate(zeilen) if re.match(rf"\s*#\s*{name}\s*=", z)]
                 i = aktiv[0] if aktiv else (aus[0] if aus else None)
                 text = f"{name} = {wert}"
@@ -184,7 +201,11 @@ class Konfig:
             except OSError as fehler:
                 print(f"Hinweis: {self.pfad} lässt sich nicht schreiben ({fehler}).")
                 return False
-            self.werte.update({k: str(v) for k, v in neu.items()})
+            for k, v in neu.items():
+                if v is None:
+                    self.werte.pop(k, None)
+                else:  # so, wie es beim nächsten Laden gelesen wird (Anführungszeichen weg)
+                    self.werte[k] = (self.zerlegen(f"{k} = {v}") or (k, str(v)))[1]
             return True
 
 

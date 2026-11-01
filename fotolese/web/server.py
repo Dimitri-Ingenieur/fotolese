@@ -27,6 +27,8 @@ from fotolese.web.html import (alben_seite, bild_daten, gruppe_pruefen_seite, im
                                ordner_zusammen, personen_seite, status_text, such_seite, uebersicht)
 from fotolese.web.importieren import import_api, import_seite, ordner_liste, papierkorb_inhalt
 from fotolese.web.papierkorb import papierkorb_api
+from fotolese.web.gruppieren import gruppieren_api, gruppieren_stand
+from fotolese.web.einstellungen import MAX_WORKFLOW, einstellungen_api, einstellungen_seite, workflow_hochladen
 
 
 class App:
@@ -165,6 +167,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._senden(200, html_typ, alben_seite(app))
         if teile.path == "/import":
             return self._senden(200, html_typ, import_seite(app))
+        if teile.path == "/einstellungen":
+            return self._senden(200, html_typ, einstellungen_seite(app))
         if teile.path in ("/api/ordner", "/api/import/status") and not import_frei(app):
             return self._json(403, {"fehler": "Import geht nur an dem Rechner, auf dem bestof.py läuft."})
         if teile.path == "/api/ordner":
@@ -182,6 +186,8 @@ class Handler(BaseHTTPRequestHandler):
             m = meta.get(f"{o}/{uid}")
             stand = "fehler" if m and m[8] else ("offen" if not m or m[7] is None else "ok")
             return self._json(200, {"f": gesichter.get(f"{o}/{uid}", []), "fs": stand})
+        if teile.path == "/api/gruppieren":
+            return self._json(200, gruppieren_stand(app, q.get("id", [])[:20]))
         if teile.path == "/api/verbessern":
             if not app.verbesserer:
                 return self._json(404, {"fehler": "Verbessern ist aus (COMFYUI = 0)."})
@@ -247,7 +253,8 @@ class Handler(BaseHTTPRequestHandler):
         if not self.headers.get("Content-Type", "").startswith("application/json"):
             return self._json(415, {"fehler": "Nur JSON."})  # verhindert Formular-Angriffe fremder Seiten
         laenge = int(self.headers.get("Content-Length") or 0)
-        if laenge > 65536:
+        grenze = 3 * MAX_WORKFLOW if urlsplit(self.path).path == "/api/workflow" else 65536
+        if laenge > grenze:
             self.close_connection = True
             return self._json(413, {"fehler": "Anfrage zu groß."})
         try:
@@ -274,6 +281,12 @@ class Handler(BaseHTTPRequestHandler):
                                                         daten.get("kolorieren"), daten.get("farbhinweise")))
         if pfad == "/api/papierkorb":
             return self._json(*papierkorb_api(app, daten))
+        if pfad == "/api/gruppieren":
+            return self._json(*gruppieren_api(app, daten))
+        if pfad == "/api/einstellungen":
+            return self._json(*einstellungen_api(app, daten))
+        if pfad == "/api/workflow":
+            return self._json(*workflow_hochladen(app, daten))
         if pfad == "/api/person" and app.index:
             return self._json(*person_aendern(app, daten))
         if pfad == "/api/gesicht" and app.index:
