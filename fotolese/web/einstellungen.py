@@ -510,7 +510,7 @@ $('umzugrueck').addEventListener('click',async()=>{
  if(!confirm('Den letzten Umzug zurücknehmen? Die Dateien kommen in ihre alten Ordner zurück.'))return;
  const [ok,j]=await post('/api/gruppieren',{aktion:'rueckgaengig'});
  if(!ok){meldung(j.fehler||'Nicht möglich.',true);return;}umzugLief=true;umzugAbfragen();});
-const ARTEN={zusammenfassen:'Zusammenfassen',gruppieren:'Neu gruppieren',umzug_rueck:'Umzug rückgängig'};
+const ARTEN={zusammenfassen:'Zusammenfassen',gruppieren:'Neu gruppieren',umzug_rueck:'Umzug rückgängig',verschieben:'Fotos verschieben'};
 async function umzugAbfragen(){let j;try{const r=await fetch('/api/gruppieren');j=await r.json();}catch(_){setTimeout(umzugAbfragen,2000);return;}
  const a=j.auftrag,l=j.letzter,lauf=a&&a.laeuft;
  if(lauf&&ARTEN[a.art])$('umzugtext').textContent=ARTEN[a.art]+': '+a.phase+(a.gesamt?' – '+zahl(a.fertig)+' von '+zahl(a.gesamt):'');

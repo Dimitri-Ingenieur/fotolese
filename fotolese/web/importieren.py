@@ -559,7 +559,7 @@ async function abfragen(){clearTimeout(zeitgeber);let j;
  const a=j.auftrag;laeuft=!!(a&&a.laeuft);knoepfe();
  if(!a){$('lauf').hidden=true;return;}
  $('lauf').hidden=false;$('abbrechen').hidden=!laeuft;
- const titel={import:'Import',rueckgaengig:'Rückgängig',duplikate:'Duplikatsuche',zusammenfassen:'Zusammenfassen',gruppieren:'Neu gruppieren',umzug_rueck:'Umzug rückgängig'}[a.art]||a.art;
+ const titel={import:'Import',rueckgaengig:'Rückgängig',duplikate:'Duplikatsuche',zusammenfassen:'Zusammenfassen',gruppieren:'Neu gruppieren',umzug_rueck:'Umzug rückgängig',verschieben:'Fotos verschieben'}[a.art]||a.art;
  $('phase').textContent=titel+(a.ziel&&a.art==='import'?' von '+a.ziel:'')+
   (a.album&&a.art==='import'?' ins Album „'+a.album+'“':'')+': '+a.phase+
   (a.gesamt?' – '+a.fertig+' von '+a.gesamt:'')+(a.zusatz?' · '+a.zusatz:'');

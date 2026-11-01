@@ -61,6 +61,10 @@ Ordner zusammenfassen (Übersicht, Knopf „Ordner zusammenfassen“):
   bekommen einen Laufindex. Sterne, Alben, Jahr und Gesichter wandern mit; „Rückgängig“ in der Meldung. Der Dialog
   nennt, mit welchem Wert (SCHWELLE, SERIE_SEK, SERIE_SCHWELLE) fotosort die Fotos beim Import selbst
   zusammengelegt hätte und was der Wert sonst zusammenlegen würde; „Übernehmen“ speichert ihn.
+Fotos verschieben (Ordnerseite, Knopf „Fotos verschieben …“):
+  Fotos anklicken, die nicht in den Ordner gehören (Umschalt = Bereich), dann „In neue Gruppe“ (nächste freie
+  Ordnernummer) oder Nummer eines vorhandenen Ordners + „In diesen Ordner“. NEF, Begleitdateien, Fassungen, Sterne,
+  Alben, Jahr und Gesichter wandern mit; „Rückgängig“ in der Meldung, ein leerer Ordner verschwindet.
 Einstellungen (Seite „Einstellungen“):
   Ähnlichkeit beim Import, Workflows (Vorwahl, eigener für die Kolorierung, hochladen), Kolorierung, Anzeige,
   Personen, Import – geschrieben in bestof.conf, gültig sofort. „Neu gruppieren“ gruppiert dort das ganze Archiv

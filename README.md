@@ -34,9 +34,10 @@ auch selbst aufrufen – dann müssen Sie fotosort.py nicht von Hand starten.
   ([mehr](#im-heimnetz))
 - Verbessern mit ComfyUI: Workflow wählen, die Fassung kommt in den Unterordner `verbessert`,
   Vorher/Nachher-Schieber in der Lupe; wahlweise danach kolorieren ([mehr](#verbessern-mit-comfyui))
-- Ordner zusammenfassen (z. B. 0004, 0005, 0006 → 0004) und das ganze Archiv mit neuen Ähnlichkeitswerten neu
-  gruppieren – Sterne, Alben, Jahr, Gesichter und Fassungen wandern mit, „Rückgängig“ inklusive; dazu die Werte,
-  mit denen fotosort die Ordner selbst zusammengelegt hätte ([mehr](#ordner-zusammenfassen-und-neu-gruppieren))
+- Ordner zusammenfassen (z. B. 0004, 0005, 0006 → 0004), Fotos, die nicht in einen Ordner gehören, in eine
+  eigene Gruppe verschieben und das ganze Archiv mit neuen Ähnlichkeitswerten neu gruppieren – Sterne, Alben,
+  Jahr, Gesichter und Fassungen wandern mit, „Rückgängig“ inklusive; dazu die Werte, mit denen fotosort die
+  Ordner selbst zusammengelegt hätte ([mehr](#ordner-zusammenfassen-und-neu-gruppieren))
 - Seite „Einstellungen“: Ähnlichkeit beim Import, Workflows (auch hochladen), Kolorierung, Anzeige, Personen
   ([mehr](#einstellungen))
 - Gesichtserkennung auf der Grafikkarte, wenn eine nutzbar ist – NVIDIA, AMD, Intel, Apple ([GPU](#gpu))
@@ -214,11 +215,11 @@ und die IP-Adresse; klappt der Name nicht, hilft `http://tigris.local:8765` oder
 z. B. `sudo ufw allow 8765/tcp`.
 
 Aus dem Heimnetz geht alles außer dem Import: Fotos ansehen, Sterne, Alben, Jahre, Namen, Papierkorb,
-Ordner zusammenfassen, Einstellungen. Importieren geht nur an dem Rechner selbst (`http://localhost:8765`),
-ebenso das Ändern der ComfyUI-Adresse und das Hochladen von Workflows – bestof.py erkennt das an der
-Absenderadresse, nicht an einem Passwort. Wer im Heimnetz nicht jedem die Fotos zeigen will, setzt in
-`bestof.conf` ein `PASSWORT` (der Benutzername ist beliebig). `HOST = 127.0.0.1` macht bestof.py wieder
-nur am eigenen Rechner erreichbar, etwa auf einem Laptop in fremden Netzen.
+Ordner zusammenfassen, Fotos verschieben, Einstellungen. Importieren geht nur an dem Rechner selbst
+(`http://localhost:8765`), ebenso das Ändern der ComfyUI-Adresse und das Hochladen von Workflows –
+bestof.py erkennt das an der Absenderadresse, nicht an einem Passwort. Wer im Heimnetz nicht jedem die
+Fotos zeigen will, setzt in `bestof.conf` ein `PASSWORT` (der Benutzername ist beliebig). `HOST = 127.0.0.1`
+macht bestof.py wieder nur am eigenen Rechner erreichbar, etwa auf einem Laptop in fremden Netzen.
 
 ### Verbessern mit ComfyUI
 
@@ -307,6 +308,15 @@ Aufnahme einen Laufindex (`IMG_0001_1.JPG`, die Fassungen passend dazu). Sterne,
 gesetztes Jahr, Gesichter und Namen bleiben erhalten; mehr Sterne als `MAX_BEST` je Ordner fallen weg –
 das sagt der Dialog vorher. Danach öffnet sich der Zielordner, die Meldung hat „Rückgängig“.
 
+**Fotos in eine eigene Gruppe:** Sind in einen Ordner Fotos geraten, die nicht dazugehören, auf der
+Ordnerseite „Fotos verschieben …“ klicken und die Fotos anklicken (Umschalt = alle bis zum zuletzt
+angeklickten). „In neue Gruppe“ legt sie in einen neuen Ordner mit der nächsten freien Nummer; wer weiß,
+wohin sie gehören, tippt stattdessen die Nummer eines vorhandenen Ordners ein und wählt „In diesen
+Ordner“. Wie beim Zusammenfassen wandern NEF, Begleitdateien, verbesserte Fassungen (eine gewählte
+Fassung nimmt ihr Original mit), Sterne, Alben, Jahr und Gesichter mit; die Meldung danach hat
+„Rückgängig“ und öffnet auf Wunsch den neuen Ordner. Wird ein Ordner dabei leer, verschwindet er.
+<kbd>Esc</kbd> oder „Fertig“ beendet die Auswahl.
+
 **Welche Ähnlichkeit hätte gereicht?** Im selben Dialog rechnet fotosort.py aus, mit welchem Wert es
 diese Fotos beim Import selbst in eine Gruppe gelegt hätte: je Einstellung der kleinste, der bei sonst
 gleichen Werten genügt – Bildvergleich (`SCHWELLE`), Serie: Zeitabstand (`SERIE_SEK`) oder Serie: Abstand
@@ -323,7 +333,8 @@ einfarbige und unlesbare Fotos bleiben, wo sie sind. Zuerst kommt eine Vorschau 
 welche Ordner zusammenkommen oder geteilt werden –, verschoben wird erst nach „Jetzt neu gruppieren“.
 „Letzten Umzug rückgängig“ stellt den alten Stand wieder her: Dateien, Sterne, Index.
 
-Jeder Umzug steht in `Sortiert/.bestof-umzug/umzug-<Zeit>.json`; zurücknehmen lässt sich der letzte.
+Jeder Umzug – Zusammenfassen, Verschieben, Neu gruppieren – steht in
+`Sortiert/.bestof-umzug/umzug-<Zeit>.json`; zurücknehmen lässt sich der letzte.
 Während eines Umzugs ruhen Import, Verbessern und der Index. Auf der Kommandozeile rechnet fotosort.py
 dasselbe, verschiebt aber nichts:
 

@@ -1,4 +1,5 @@
-"""fotolese.web.gruppieren – Ordner zusammenfassen und das Archiv neu gruppieren, mit Rückgängig.
+"""fotolese.web.gruppieren – Ordner zusammenfassen, Fotos in eine neue Gruppe verschieben, das Archiv neu
+gruppieren – mit Rückgängig.
 
 fotosort.py rechnet (MODUS=analyse: mit welchen Ähnlichkeitswerten wären diese Ordner automatisch zusammengekommen,
 MODUS=gruppen: Plan für das ganze Archiv), bestof führt aus. Verschoben wird je Aufnahme alles, was dazugehört:
@@ -18,14 +19,15 @@ import time
 import traceback
 
 from fotolese.web.konst import BILD_EXT, ORDNER_MUSTER, VERBESSERT
-from fotolese.web.konfig import bilder_text, natuerlich, url_id
+from fotolese.web.konfig import bilder_text, name_aus_id, natuerlich, url_id
 from fotolese.web.importieren import fotosort_lauf, gruppen_umgebung
 
 UMZUG = ".bestof-umzug"  # Unterordner von SORTIERT: Protokolle und Pläne
 FOTO_EXT = {".jpg", ".jpeg", ".png", ".nef"}
 BEGLEIT_EXT = {".xmp", ".pp3", ".aae"}
 SAMMEL = "0000"
-ARTEN = {"zusammenfassen": "Zusammenfassen", "gruppieren": "Neu gruppieren", "umzug_rueck": "Umzug rückgängig"}
+ARTEN = {"zusammenfassen": "Zusammenfassen", "gruppieren": "Neu gruppieren", "umzug_rueck": "Umzug rückgängig",
+         "verschieben": "Fotos verschieben"}
 MAX_RECHNUNGEN = 20
 GRENZEN = {"SCHWELLE": (0, 128, int), "SERIE_SEK": (0.0, 86400.0, float), "SERIE_SCHWELLE": (0, 128, int)}
 
@@ -327,17 +329,18 @@ def _schreiben(pfad, daten):
 
 
 class Umzug(threading.Thread):
-    """Exklusiver Auftrag wie der Import (app.auftrag): Ordner zusammenfassen, einen Plan von fotosort ausführen
-    oder den letzten Umzug zurücknehmen."""
+    """Exklusiver Auftrag wie der Import (app.auftrag): Ordner zusammenfassen, Fotos verschieben, einen Plan von
+    fotosort ausführen oder den letzten Umzug zurücknehmen."""
 
-    def __init__(self, app, art, ordner=None, ziel=None, plan=None):
+    def __init__(self, app, art, ordner=None, ziel=None, plan=None, auswahl=None):
         super().__init__(daemon=True)
         self.app, self.art, self.ordner, self.ziel, self.plan = app, art, ordner, ziel, plan
+        self.auswahl = auswahl or []  # Fotos verschieben: [(Ordner, Name wie in bestof)]
         self.abbruch, self.proc = False, None
         self.status = {"art": art, "ziel": None, "laeuft": True, "phase": "Start", "fertig": 0, "gesamt": 0,
                        "zusatz": "", "log": [], "ergebnis": "", "fehler": "", "protokoll": None, "start": time.time(),
                        "ende": None, "album": None, "album_n": 0, "ordner": ordner, "zielordner": ziel,
-                       "umzug": None, "bewegt": 0}
+                       "umzug": None, "bewegt": 0, "entfernt": []}
 
     def abbrechen(self):
         self.abbruch = True
@@ -348,6 +351,8 @@ class Umzug(threading.Thread):
             with app.umzug_sperre:
                 if self.art == "zusammenfassen":
                     self._zusammenfassen()
+                elif self.art == "verschieben":
+                    self._verschieben()
                 elif self.art == "gruppieren":
                     self._plan_ausfuehren()
                 else:
@@ -444,6 +449,7 @@ class Umzug(threading.Thread):
 
     def _abschluss(self, prot, pfad, text):
         prot["text"] = text
+        self.status["entfernt"] = list(prot["entfernt"])
         _schreiben(pfad, prot)
         if prot["umzuege"]:
             self.status["ergebnis"] = text
@@ -474,6 +480,51 @@ class Umzug(threading.Thread):
         text = (f"{len(quellen) + 1} Ordner zu {self.ziel} zusammengefasst: {bilder_text(prot['bilder'])} verschoben"
                 + _entfernt_text(prot) + "." + self._zusatz(prot)
                 + (f" {bleibt} Dateien oder Unterordner blieben, wo sie waren." if bleibt else ""))
+        self._abschluss(prot, pfad, text)
+
+    def _verschieben(self):
+        """Ausgewählte Fotos – je Aufnahme mit allem, was dazugehört – in eine neue Gruppe (nächste freie Nummer)
+        oder einen vorhandenen Ordner. Eine gewählte Fassung nimmt ihr Original und dessen Fassungen mit."""
+        app = self.app
+        neu = self.ziel is None
+        if neu:
+            hoch = max([int(o) for o in app.archiv.ordner(frisch=True)] + [0])
+            if hoch >= 9999:
+                raise UmzugFehler("Es ist keine Ordnernummer mehr frei.")
+            self.ziel = f"{hoch + 1:04d}"
+        self.status["zielordner"] = self.ziel
+        staende, liste, gesehen, fehlt = {}, [], set(), 0
+
+        def stand(o):
+            if o not in staende:
+                staende[o] = Stand(app.archiv.pfad, o)
+            return staende[o]
+
+        for o, name in self.auswahl:
+            if o == self.ziel:
+                continue
+            quelle = stand(o)
+            if name.startswith(VERBESSERT + "/"):
+                v = name.split("/", 1)[1]
+                schluessel = next((k for k, e in quelle.einheiten.items() if v in e.fassungen), None)
+            else:
+                schluessel = stamm_von(name)[1].casefold() if name.casefold() in quelle.namen else None
+            if schluessel is None or schluessel not in quelle.einheiten:
+                fehlt += 1  # inzwischen weg oder eine Fassung ohne Original
+                continue
+            if (o, schluessel) not in gesehen:
+                gesehen.add((o, schluessel))
+                liste.append((quelle, schluessel, stand(self.ziel)))
+        if not liste:
+            raise UmzugFehler("Diese Fotos gibt es dort nicht mehr – bitte die Seite neu laden.")
+        prot, pfad, _ = self._umziehen(liste, staende)
+        n = self.status["bewegt"]
+        f = sum(1 for a, _ in prot["umzuege"] if f"/{VERBESSERT}/" in a and index_id(a))
+        was = ("1 Foto" if n == 1 else f"{n} Fotos") + (
+            f" (mit {f} verbesserten Fassung{'' if f == 1 else 'en'})" if f else "")
+        text = ((f"{was} in die neue Gruppe {self.ziel} verschoben" if neu else f"{was} nach {self.ziel} verschoben")
+                + _entfernt_text(prot) + "." + self._zusatz(prot)
+                + (f" {fehlt} gab es nicht mehr." if fehlt else ""))
         self._abschluss(prot, pfad, text)
 
     def _plan_ausfuehren(self):
@@ -571,7 +622,7 @@ class Umzug(threading.Thread):
             _leer_entfernen(os.path.join(app.archiv.pfad, o))
         prot["rueckgaengig"] = time.strftime("%Y%m%d-%H%M%S")
         _schreiben(pfad, prot)
-        st["ergebnis"] = (f"Rückgängig: {zurueck} Dateien zurückgelegt, Sterne wie vorher."
+        st["ergebnis"] = (f"Rückgängig: {zurueck} {'Datei' if zurueck == 1 else 'Dateien'} zurückgelegt, Sterne wie vorher."
                           + (f" {fehlt} ließen sich nicht zurücklegen (inzwischen verschoben, umbenannt oder "
                              "der alte Name ist wieder belegt)." if fehlt else ""))
 
@@ -676,6 +727,21 @@ def _ordner_pruefen(app, roh, mindest=2):
     return ordner
 
 
+def _pfade_pruefen(app, roh):
+    """[„0008/<id>“, …] aus einer Anfrage -> [(Ordner, Name)] – nur Bilder, die bestof dort wirklich zeigt."""
+    if not isinstance(roh, list) or not 1 <= len(roh) <= 5000:
+        raise UmzugFehler("Bitte mindestens ein Foto wählen.")
+    vorhanden, auswahl = set(app.archiv.ordner(frisch=True)), []
+    for p in roh:
+        o, _, uid = str(p).partition("/")
+        name = name_aus_id(uid)
+        if not (ORDNER_MUSTER.fullmatch(o) and o in vorhanden and uid and url_id(name) == uid
+                and app.archiv.datei(o, name)):
+            raise UmzugFehler("Ein Foto gibt es nicht mehr – bitte die Seite neu laden.")
+        auswahl.append((o, name))
+    return list(dict.fromkeys(auswahl))
+
+
 def vorschau(app, ordner, ziel):
     """Vor dem Zusammenfassen: Bilder und Sterne je Ordner, wie viele Aufnahmen einen Laufindex bekämen und wie
     viele Sterne über MAX_BEST hinaus wegfielen. Liest nur."""
@@ -748,11 +814,21 @@ def gruppieren_api(app, daten):
             if ziel not in ordner:
                 return 400, {"fehler": "Das Ziel muss einer der gewählten Ordner sein."}
             return 200, vorschau(app, ordner, ziel)
-        if aktion in ("zusammenfassen", "ausfuehren", "rueckgaengig"):
+        if aktion in ("zusammenfassen", "ausfuehren", "rueckgaengig", "verschieben"):
             grund = _belegt(app)
             if grund:
                 return 409, {"fehler": grund}
-            if aktion == "zusammenfassen":
+            if aktion == "verschieben":
+                auswahl = _pfade_pruefen(app, daten.get("pfade"))
+                ziel = str(daten.get("ziel") or "neu")
+                if ziel != "neu":
+                    if not ORDNER_MUSTER.fullmatch(ziel) or ziel not in app.archiv.ordner(frisch=True):
+                        return 404, {"fehler": f"Ordner {ziel} gibt es nicht."}
+                    if all(o == ziel for o, _ in auswahl):
+                        return 400, {"fehler": f"Die Fotos liegen schon in Ordner {ziel}."}
+                app.auftrag = Umzug(app, "verschieben", ordner=sorted({o for o, _ in auswahl}),
+                                    ziel=None if ziel == "neu" else ziel, auswahl=auswahl)
+            elif aktion == "zusammenfassen":
                 ordner = _ordner_pruefen(app, daten.get("ordner"))
                 ziel = str(daten.get("ziel") or ordner[0])
                 if ziel not in ordner:
@@ -786,7 +862,7 @@ def gruppieren_stand(app, ids):
     if a is not None:
         s = a.status
         auftrag = ({k: s.get(k) for k in ("art", "laeuft", "phase", "fertig", "gesamt", "zusatz", "ergebnis", "fehler",
-                                          "ordner", "zielordner", "bewegt", "start", "ende")}
+                                          "ordner", "zielordner", "bewegt", "entfernt", "start", "ende")}
                    if s["art"] in ARTEN else {"art": s["art"], "laeuft": s["laeuft"]})
     _, prot = letzter_umzug(app)
     letzter = None

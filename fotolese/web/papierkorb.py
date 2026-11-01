@@ -161,7 +161,7 @@ def umzug_laeuft(app):
     """Werden gerade Ordner zusammengefasst oder neu gruppiert? Dann warten Papierkorb und Verbessern."""
     a = getattr(app, "auftrag", None)
     return a is not None and a.status.get("laeuft") and a.status.get("art") in ("zusammenfassen", "gruppieren",
-                                                                                  "umzug_rueck")
+                                                                                  "umzug_rueck", "verschieben")
 
 
 def papierkorb_api(app, daten):

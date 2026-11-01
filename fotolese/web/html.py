@@ -271,6 +271,10 @@ select{font:inherit;color:inherit;padding:5px 8px;background:var(--flaeche);bord
 .knopf.amark.an,.lupe .knopf.almark.an{border-color:var(--album);color:var(--album)}
 .imalbum .rahmen{outline:3px solid var(--album);outline-offset:-3px}
 .feld.eingeordnet .rahmen img{opacity:.35}
+.vs-an .feld .rahmen{cursor:pointer}.feld.markiert .rahmen{outline:3px solid var(--stift);outline-offset:-3px;position:relative}
+.feld.markiert .rahmen::after{content:"✓";position:absolute;top:8px;left:8px;background:var(--stift);color:var(--umfeld);
+ border-radius:999px;width:24px;height:24px;display:grid;place-items:center;font-weight:700}
+.vsin{display:flex;gap:6px}.vsin .pname{font-size:15px;width:5.5em}
 .albumleiste{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;
   padding:10px 16px;background:var(--umfeld);border-bottom:1px solid var(--linie)}
 .albumleiste.aktiv{border-bottom-color:var(--album)}
@@ -305,8 +309,9 @@ FAVICON = ("data:image/svg+xml," + quote(
 JS_GEMEINSAM = """
 const meldungEl=document.querySelector('.meldung');let meldungTimer;
 function meldung(text,fehler,aktion){meldungEl.textContent=text;meldungEl.classList.toggle('fehler',!!fehler);
- if(aktion){const k=document.createElement('button');k.type='button';k.className='link mknopf';k.textContent=aktion[0];
-  k.addEventListener('click',()=>{meldungEl.hidden=true;aktion[1]();});meldungEl.append(k);}  // aktion: [Text, Funktion]
+ const aktionen=aktion?(Array.isArray(aktion[0])?aktion:[aktion]):[];  // [Text, Funktion] oder Liste davon
+ for(const [t,fn] of aktionen){const k=document.createElement('button');k.type='button';k.className='link mknopf';
+  k.textContent=t;k.addEventListener('click',()=>{meldungEl.hidden=true;fn();});meldungEl.append(k);}
  meldungEl.hidden=false;clearTimeout(meldungTimer);
  meldungTimer=setTimeout(()=>meldungEl.hidden=true,aktion?10000:fehler?6000:2600);}
 async function post(url,daten){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
@@ -315,12 +320,14 @@ async function post(url,daten){const r=await fetch(url,{method:'POST',headers:{'
 // Umzug (Ordner zusammengefasst): Meldung nach dem Seitenwechsel, mit „Rückgängig“
 async function auftragWarten(){for(;;){await new Promise(r=>setTimeout(r,400));let j;
  try{j=await (await fetch('/api/gruppieren')).json();}catch(_){continue;}if(j.auftrag&&!j.auftrag.laeuft)return j.auftrag;}}
-async function umzugZurueck(){const [ok,j]=await post('/api/gruppieren',{aktion:'rueckgaengig'});
+async function umzugZurueck(nachher){const [ok,j]=await post('/api/gruppieren',{aktion:'rueckgaengig'});
  if(!ok){meldung(j.fehler||'Nicht möglich.',true);return;}meldung('Wird zurückgenommen …');const a=await auftragWarten();
  try{sessionStorage.setItem('bestofMeldung',JSON.stringify({text:a.fehler||a.ergebnis,fehler:!!a.fehler}));}catch(_){}
- location.href='/';}
+ location.href=nachher||'/';}
 try{const m=JSON.parse(sessionStorage.getItem('bestofMeldung')||'null');sessionStorage.removeItem('bestofMeldung');
- if(m)setTimeout(()=>meldung(m.text,!!m.fehler,m.rueck?['Rückgängig',umzugZurueck]:null),50);}catch(_){}
+ if(m){const akt=[];if(m.rueck)akt.push(['Rückgängig',()=>umzugZurueck(m.nachher)]);
+  if(m.ziel&&location.pathname!=='/o/'+m.ziel)akt.push(['Ordner '+m.ziel+' öffnen',()=>{location.href='/o/'+m.ziel;}]);
+  setTimeout(()=>meldung(m.text,!!m.fehler,akt.length?akt:null),50);}}catch(_){}
 const statusEl=document.querySelector('.status');
 async function statusHolen(){try{const r=await fetch('/api/status');const j=await r.json();
  statusEl.textContent=j.text;if(j.laeuft)setTimeout(statusHolen,3000);}catch(_){}}
@@ -460,7 +467,8 @@ function sichtbar(i,schritt){const n=D.bilder.length;  // nächstes nicht weggew
 felder.forEach((f,i)=>{f.querySelector('.stern').addEventListener('click',()=>umschalten(i));
  f.querySelector('.korb').addEventListener('click',()=>wegwerfen(i));
  f.querySelector('.holen').addEventListener('click',()=>zurueckholen(i));
- f.querySelector('.rahmen').addEventListener('click',()=>{if(!D.bilder[i].weg)oeffne(i);});
+ f.querySelector('.rahmen').addEventListener('click',ev=>{if(D.bilder[i].weg)return;
+  if(window.feldKlick&&window.feldKlick(i,ev))return;oeffne(i);});  // feldKlick: Fotos verschieben (Auswahl)
  const k=f.querySelector('.jsetz');if(k)k.addEventListener('click',ev=>jahrKlick(i,ev.shiftKey));});
 function vorladen(i){if(i>=0&&i<D.bilder.length){const b=new Image();b.src=D.bilder[i].g;}}
 function hinweisText(b){const n=b.f.length,klick=' Ins Gesicht klicken, um es zu markieren.';
@@ -628,7 +636,7 @@ document.addEventListener('keydown',ev=>{
   if(ev.key==='ArrowRight'&&D.weiter)location.href=D.weiter;
   else if(ev.key==='ArrowLeft'&&D.zurueck)location.href=D.zurueck;
   else if(ev.key==='n'||ev.key==='N')location.href=D.offen;
-  else if(ev.key==='Escape')location.href=D.uebersicht;
+  else if(ev.key==='Escape'){if(window.vsAus&&window.vsAus())return;location.href=D.uebersicht;}
  }});
 felder.forEach((f,i)=>{const inp=f.querySelector('.jahr');feldMeta(i);if(!inp)return;
  jahrTasten(inp);inp.addEventListener('change',()=>jahrAendern(inp,i));});
@@ -812,6 +820,42 @@ document.querySelectorAll('.aloeschen').forEach(k=>k.addEventListener('click',as
  if(!ok){meldung(j.fehler||'Löschen fehlgeschlagen.',true);return;}
  try{if(localStorage.getItem('bestofAlbum')===k.dataset.id)localStorage.removeItem('bestofAlbum');}catch(_){}
  meldung(j.meldung);setTimeout(()=>location.reload(),1200);}));
+"""
+
+JS_VERSCHIEBEN = """
+// Fotos verschieben: anklicken (Umschalt = Bereich), dann in eine neue Gruppe oder einen anderen Ordner
+const vsKnopf=document.getElementById('verschieben'),vsLeiste=document.getElementById('vsleiste');
+let vsAn=false,vsLetzte=-1;const vsGew=new Set();
+function vsModus(an){vsAn=an&&!!vsLeiste;document.body.classList.toggle('vs-an',vsAn);if(vsLeiste)vsLeiste.hidden=!vsAn;
+ if(vsKnopf)vsKnopf.setAttribute('aria-pressed',vsAn);if(!vsAn){vsGew.clear();vsLetzte=-1;}vsZeigen();}
+function vsListe(){return [...vsGew].filter(i=>!D.bilder[i].weg).sort((a,b)=>a-b);}
+function vsZeigen(){felder.forEach((f,i)=>f.classList.toggle('markiert',vsGew.has(i)));if(!vsLeiste)return;const l=vsListe();
+ document.getElementById('vstext').textContent=l.length?(l.length===1?'1 Foto':l.length+' Fotos')+' gewählt: '+
+  l.map(i=>D.bilder[i].name).join(', '):'Fotos anklicken, die nicht in diese Gruppe gehören (Umschalt = Bereich).';
+ document.getElementById('vsneu').disabled=!l.length||!D.naechster;document.getElementById('vsin').disabled=!l.length;}
+window.feldKlick=(i,ev)=>{if(!vsAn)return false;
+ if(ev.shiftKey&&vsLetzte>=0){const an=!vsGew.has(i);for(let k=Math.min(vsLetzte,i);k<=Math.max(vsLetzte,i);k++){
+   if(D.bilder[k].weg)continue;if(an)vsGew.add(k);else vsGew.delete(k);}}
+ else if(vsGew.has(i))vsGew.delete(i);else vsGew.add(i);vsLetzte=i;vsZeigen();return true;};
+window.vsAus=()=>{if(!vsAn)return false;vsModus(false);return true;};
+async function vsStarten(ziel){const l=vsListe();if(!l.length)return;const was=l.length===1?'1 Foto':l.length+' Fotos';
+ if(!confirm(was+(ziel==='neu'?' in eine neue Gruppe (Ordner '+D.naechster+')':' nach Ordner '+ziel)+' verschieben? '+
+  'NEF, Begleitdateien, verbesserte Fassungen, Sterne, Alben, Jahr und Gesichter kommen mit; „Rückgängig“ ist möglich.'))return;
+ const [ok,j]=await post('/api/gruppieren',{aktion:'verschieben',pfade:l.map(i=>D.ordner+'/'+D.bilder[i].id),ziel});
+ if(!ok){meldung(j.fehler||'Verschieben nicht möglich.',true);return;}
+ meldung('Wird verschoben …');const a=await auftragWarten(),leer=(a.entfernt||[]).includes(D.ordner);
+ try{sessionStorage.setItem('bestofMeldung',JSON.stringify({text:a.fehler||a.ergebnis,fehler:!!a.fehler,rueck:!a.fehler,
+  nachher:'/o/'+D.ordner,ziel:a.fehler?null:a.zielordner}));}catch(_){}
+ location.href=leer&&!a.fehler?'/o/'+a.zielordner:location.pathname;}
+if(vsKnopf&&vsLeiste){vsKnopf.addEventListener('click',()=>vsModus(!vsAn));
+ document.getElementById('vsende').addEventListener('click',()=>vsModus(false));
+ document.getElementById('vsneu').addEventListener('click',()=>vsStarten('neu'));
+ document.getElementById('vsform').addEventListener('submit',ev=>{ev.preventDefault();
+  const z=document.getElementById('vsziel').value.replace(/\\D/g,'');
+  if(!z){meldung('Bitte die Nummer des Zielordners eingeben, z. B. 0012.',true);return;}
+  const ziel=String(+z).padStart(4,'0');if(ziel===D.ordner){meldung('Die Fotos liegen schon in Ordner '+ziel+'.',true);return;}
+  vsStarten(ziel);});
+ vsZeigen();}
 """
 
 JS_VERBESSERN = """
@@ -1160,7 +1204,12 @@ ALBBOX = ('<div class="albbox" hidden role="dialog" aria-label="Alben zuordnen">
           '<button class="link azu" type="button">Fertig</button></div></div>')
 
 
-def bogen_hilfe(app):
+VERSCHIEBEN_HILFE = (' Gehören Fotos nicht in diesen Ordner: „Fotos verschieben …“, Fotos anklicken (Umschalt = Bereich), '
+                     'dann „In neue Gruppe“ oder die Nummer eines anderen Ordners – mit NEF, Fassungen, Sternen und '
+                     'Alben, „Rückgängig“ inklusive.')
+
+
+def bogen_hilfe(app, einordner=False):
     """Hilfezeile unter dem Kontaktbogen (Ordner und Filter)."""
     text = (f'Bild anklicken zum Vergrößern. ☆ unter dem Bild = Stern: kopiert es nach BestOf (je Ordner höchstens '
             f'{app.auswahl.max_best}). Der Eimer daneben schiebt das Foto in den Papierkorb (Ordner {PAPIERKORB}, '
@@ -1174,14 +1223,14 @@ def bogen_hilfe(app):
         verbessern += (' Mit „+ Kolorierung“ folgt ein zweiter Lauf, der Schwarzweiß einfärbt (…_koloriert.png); '
                        '„wenn S/W“ färbt nur, was keine Farbe hat.')
     if not app.index:
-        return f'<p class="hilfe">{text}<kbd>Esc</kbd> schließen.{verbessern}</p>'
+        return f'<p class="hilfe">{text}<kbd>Esc</kbd> schließen.{verbessern}{VERSCHIEBEN_HILFE * einordner}</p>'
     return (f'<p class="hilfe">{text}<kbd>G</kbd> Gesichter (Namensschild anklicken = benennen, fehlt eins: ins '
             f'Gesicht klicken), <kbd>J</kbd> Jahr ändern, <kbd>A</kbd> Album, <kbd>Esc</kbd> schließen.{verbessern} '
             'Jahr korrigieren: ins Jahresfeld tippen, Enter; leeren = Jahr aus der Datei. Für viele Fotos: oben bei '
             '„Jahr per Klick“ das Jahr eintippen, dann → Jahr unter den Fotos anklicken (Umschalt = Bereich). '
             'Alben: oben ein Album wählen, dann ＋ unter den Fotos (Umschalt = Bereich); ein Album unter einem Foto '
             'anklicken zeigt alle Fotos darin. „Alle Fotos“ oben zeigt das ganze Archiv nach Datum, „Ohne Album“ '
-            'die Fotos, die noch in keinem Album sind.</p>')
+            'die Fotos, die noch in keinem Album sind.' + VERSCHIEBEN_HILFE * einordner + '</p>')
 
 
 def seiten_nav(seite_nr, seiten, link):
@@ -1207,6 +1256,13 @@ def ordner_zusammen(app, ordner):
     return ", ".join(t for t in (datum_kurz(z[0]), z[1] or "") if t) if z else ""
 
 
+VERSCHIEBEN_HTML = """<div class="wahlleiste" id="vsleiste" hidden><span id="vstext"></span>
+<button class="knopf haupt" id="vsneu" type="button" disabled>In neue Gruppe ({naechster})</button>
+<form class="vsin" id="vsform"><input id="vsziel" class="pname" inputmode="numeric" maxlength="4" placeholder="Ordner"
+ aria-label="Nummer des Zielordners" autocomplete="off"><button class="knopf" id="vsin" disabled>In diesen Ordner</button></form>
+<button class="knopf" id="vsende" type="button">Fertig</button></div>"""
+
+
 def ordner_seite(app, ordner):
     app.auswahl.bereinigen(ordner)
     liste = app.archiv.ordner()
@@ -1223,6 +1279,12 @@ def ordner_seite(app, ordner):
     if weiter:
         weg.append(f'<a class="knopf" href="/o/{weiter}" title="Taste →">Ordner {weiter}</a>')
     weg.append(f'<a class="knopf" href="/weiter/{ordner}" title="Taste N">Nächster ohne Stern</a>')
+    if bilder:
+        weg.append('<button class="knopf" id="verschieben" type="button" aria-pressed="false" title="Fotos auswählen, '
+                   'die nicht in diese Gruppe gehören, und in eine neue Gruppe oder einen anderen Ordner verschieben">'
+                   'Fotos verschieben …</button>')
+    hoch = max(int(o) for o in liste)
+    naechster = f"{hoch + 1:04d}" if hoch < 9999 else None
     ordnerjahr = ('<form class="ordnerjahr" id="ordnerjahr"><input class="jahr" inputmode="numeric" maxlength="4" '
                   'placeholder="Jahr" aria-label="Jahr für alle Bilder dieses Ordners" title="Jahr für alle Bilder dieses '
                   'Ordners setzen. Leer lassen = alle Korrekturen im Ordner entfernen.">'
@@ -1234,7 +1296,8 @@ def ordner_seite(app, ordner):
     if not bilder:
         inhalt += '<p class="leer">In diesem Ordner liegen keine JPG- oder PNG-Bilder.</p>'
     else:
-        inhalt += (ALBUMLEISTE if app.index else "") + f'<main class="bogen">{felder}</main>' + bogen_hilfe(app)
+        inhalt += ((ALBUMLEISTE if app.index else "") + f'<main class="bogen">{felder}</main>'
+                   + bogen_hilfe(app, einordner=True) + VERSCHIEBEN_HTML.replace("{naechster}", naechster or "–"))
     inhalt += LUPE_HTML + (ALBBOX if app.index else "")
     markiert = app.auswahl.markiert(ordner)
     js = {"einordner": True, "ordner": ordner, "max": app.auswahl.max_best, "bilder": daten, "jahr": bool(app.index),
@@ -1242,12 +1305,12 @@ def ordner_seite(app, ordner):
           "auswahl": {ordner: [url_id(m) for m in markiert]},
           "ziele": {ordner: {url_id(m): z for m, z in app.auswahl.ziele(ordner).items()}},
           "zurueck": f"/o/{zurueck}" if zurueck else None, "weiter": f"/o/{weiter}" if weiter else None,
-          "offen": f"/weiter/{ordner}", "uebersicht": f"/?seite={seite_nr}",
+          "offen": f"/weiter/{ordner}", "uebersicht": f"/?seite={seite_nr}", "naechster": naechster,
           "alben": alben_liste(app.index) if app.index else None,
           "verbessern": app.verbesserer.fuer_seite() if app.verbesserer else [], "kolorieren": farb_daten(app),
           "vorwahl": app.verbesserer.vorwahl if app.verbesserer else ""}
     inhalt += f'<script type="application/json" id="daten">{json_im_html(js)}</script>'
-    return seite(f"{ordner} – BestOf", inhalt, JS_BOGEN + JS_ALBEN + JS_VERBESSERN)
+    return seite(f"{ordner} – BestOf", inhalt, JS_BOGEN + JS_ALBEN + JS_VERBESSERN + JS_VERSCHIEBEN)
 
 
 def such_seite(app, text, seite_nr):
