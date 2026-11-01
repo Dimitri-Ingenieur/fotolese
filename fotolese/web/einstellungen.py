@@ -11,7 +11,7 @@ import re
 from fotolese.web import konfig
 from fotolese.web.konfig import e
 from fotolese.web.html import json_im_html, kopf, seite
-from fotolese.web.kolorieren import STANDARD_PROMPT
+from fotolese.web.kolorieren import OHNE_PROMPT, STANDARD_PROMPT
 from fotolese.web.verbessern import Comfy, Workflows, workflow_namen
 
 MAX_WORKFLOW = 2 * 1024 * 1024  # Bytes: größere Workflow-Dateien nimmt die Seite nicht an
@@ -186,7 +186,7 @@ def pruefen(app, feld, roh):
         if not w:
             raise ValueError(f"{feld.titel}: Workflow {text} gibt es nicht (oder er ist nicht brauchbar).")
         if feld.art == "farbworkflow" and not w["farbe"]:
-            raise ValueError(f"{feld.titel}: „{w['name']}“ hat keinen Prompt-Text – damit geht keine Kolorierung.")
+            raise ValueError(f"{feld.titel}: „{w['name']}“ – {OHNE_PROMPT}")
         return text
     if "\n" in text or "\r" in text or '"' in text or len(text) > 2000:
         raise ValueError(f"{feld.titel}: eine Zeile, ohne Anführungszeichen, höchstens 2000 Zeichen.")
@@ -352,7 +352,7 @@ def _eingabe(app, feld, d):
         else:
             leer = "– zuletzt gewählter –" if feld.art == "workflow" else "– wie beim Verbessern –"
             optionen = [("", leer)] + [(w["datei"], w["name"] + ("" if w["farbe"] or feld.art == "workflow"
-                                                                  else " (ohne Prompt-Text)"))
+                                                                  else " (kein Prompt gefunden)"))
                                        for w in _workflows(app).brauchbar()]
             if d["wert"] and d["wert"] not in [k for k, _ in optionen]:
                 optionen.append((d["wert"], f"{d['wert']} (fehlt)"))

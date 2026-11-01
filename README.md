@@ -224,16 +224,18 @@ zweiten Lauf nur die Farbe; dass Qwen beim Neuzeichnen um ein paar Pixel verruts
 Scheitert die Kolorierung, bleibt die Restaurierung erhalten und die Meldung nennt den Grund.
 
 Dafür braucht der Rechner `ffmpeg` (unter Ubuntu `sudo apt install ffmpeg`); fehlt es, bietet bestof.py
-keine Kolorierung an und sagt das beim Start. Kolorieren kann jeder Workflow mit einem Prompt-Text,
-der genau einen Speicher-Knoten hat – der mitgelieferte „Foto restore“ zum Beispiel. Soll der zweite Lauf
-einen anderen Workflow nehmen als die Restaurierung, legt ihn `FARBE_WORKFLOW` fest; dann geht die
-Kolorierung nach jedem Workflow. Einstellungen in `bestof.conf` oder auf der Seite
+keine Kolorierung an und sagt das beim Start. Kolorieren kann jeder Workflow mit genau einem
+Speicher-Knoten und einem Prompt-Text – der mitgelieferte „Foto restore“ (Qwen) ebenso wie Workflows mit
+„CLIP Text Encode“ für SD, SDXL oder Flux. Als Prompt gilt der erste Text-Encoder auf dem Weg vom
+Speicher-Knoten zurück zum Sampler, nie der negative; liegt die Erkennung daneben, den richtigen Knoten
+in ComfyUI im Titel mit „fotolese“ kennzeichnen. Soll der zweite Lauf einen anderen Workflow nehmen als
+die Restaurierung, legt ihn `FARBE_WORKFLOW` fest; dann geht die Kolorierung nach jedem Workflow. Einstellungen in `bestof.conf` oder auf der Seite
 [Einstellungen](#einstellungen):
 
 | Einstellung | Standard | Bedeutung |
 |---|---|---|
 | `COLORIZE_DEFAULT` | `off` | vorgewählt: `off`, `on` oder `auto`; in der Lupe änderbar |
-| `COLORIZE_RESTORE_LORA` | `0` | 0 = Restore-LoRA aus; 0.3–0.5 bei Farbsäumen |
+| `COLORIZE_RESTORE_LORA` | `0` | 0 = Restore-LoRA (Name mit „restore“, in jedem LoRA-Loader) aus; 0.3–0.5 bei Farbsäumen |
 | `COLORIZE_LUMA_LOCK` | `1` | 0 = Bild des zweiten Laufs unverändert übernehmen |
 | `COLORIZE_CHROMA_BLUR` | `0` | Farbe weichzeichnen (Sigma) gegen Farbsäume |
 | `COLORIZE_MONO_THRESHOLD` | `10` | Farbstreuung darunter gilt als monochrom (`auto`) |
