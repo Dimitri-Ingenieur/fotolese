@@ -45,23 +45,20 @@ GRUPPEN = [
               "Neustart). Nur an diesem Rechner änderbar.", lokal=True),
          Feld("VERBESSERN_WORKFLOW", "Workflow für „Verbessern“", "workflow", "", "In der Lupe vorgewählt; leer = der "
               "zuletzt dort gewählte."),
-         Feld("FARBE_WORKFLOW", "Workflow für die Kolorierung", "farbworkflow", "", "Zweiter Lauf auf der "
-              "restaurierten Fassung; leer = derselbe Workflow wie beim Verbessern. Braucht einen Prompt-Text."),
+         Feld("FARBE_WORKFLOW", "Workflow für „Kolorieren“", "farbworkflow", "", "Färbt das gezeigte Foto ein – "
+              "Original oder verbesserte Fassung; leer = der in der Lupe gewählte, wenn er einen Prompt-Text hat."),
      ]),
-    ("kolorierung", "Kolorierung",
-     "Zweiter Lauf nach der Restaurierung, braucht ffmpeg. Ergebnis <Name>_<Workflow>_koloriert.png.", [
-         Feld("COLORIZE_DEFAULT", "Vorwahl in der Lupe", "wahl", "off", "", None,
-              [("off", "aus"), ("on", "an"), ("auto", "nur Schwarzweiß und Sepia")]),
-         Feld("COLORIZE_RESTORE_LORA", "Restore-LoRA im zweiten Lauf", "float", 0.0, "0 = aus; 0,3–0,5 hilft bei "
+    ("kolorierung", "Kolorieren",
+     "Eigener Knopf „◐ Kolorieren“ in der Lupe: färbt das gezeigte Foto ein – das Original direkt oder eine "
+     "verbesserte Fassung. Braucht ffmpeg. Ergebnis <Name>_koloriert.png im Unterordner verbessert.", [
+         Feld("COLORIZE_RESTORE_LORA", "Restore-LoRA beim Kolorieren", "float", 0.0, "0 = aus; 0,3–0,5 hilft bei "
               "Farbsäumen.", (0, 1)),
-         Feld("COLORIZE_LUMA_LOCK", "Luma-Lock", "bool", True, "Helligkeit und Details aus der Restaurierung, nur die "
-              "Farbe aus dem zweiten Lauf."),
+         Feld("COLORIZE_LUMA_LOCK", "Luma-Lock", "bool", True, "Helligkeit und Details aus dem Foto, nur die Farbe "
+              "von ComfyUI."),
          Feld("COLORIZE_CHROMA_BLUR", "Farbe weichzeichnen (Sigma)", "float", 0.0, "Gegen Farbsäume; 0 = aus.",
               (0, 20)),
-         Feld("COLORIZE_MONO_THRESHOLD", "Schwelle für „nur Schwarzweiß“", "float", 10.0, "Farbstreuung darunter gilt "
-              "als monochrom.", (0, 255)),
          Feld("COLORIZE_PROMPT", "Kolorier-Anweisung", "textlang", "", "Leer = eingebaute Anweisung (englisch)."),
-         Feld("COLORIZE_KEEP_RAW", "Bild des zweiten Laufs behalten", "bool", False, "Zusätzlich als "
+         Feld("COLORIZE_KEEP_RAW", "Bild von ComfyUI behalten", "bool", False, "Zusätzlich als "
               "…_koloriert_roh.png."),
      ]),
     ("anzeige", "Anzeige", "", [
@@ -132,11 +129,9 @@ ZUGRIFF = {  # Name -> (aktueller Wert oder None = aus bestof.conf lesen, sofort
     "COMFYUI": ((lambda app: app.verbesserer.comfy.basis if app.verbesserer else None), _comfy_setzen),
     "VERBESSERN_WORKFLOW": _verb_attr("vorwahl"),
     "FARBE_WORKFLOW": _verb_attr("farb_workflow"),
-    "COLORIZE_DEFAULT": _farb_attr("standard"),
     "COLORIZE_RESTORE_LORA": _farb_attr("restore_lora"),
     "COLORIZE_LUMA_LOCK": _farb_attr("luma"),
     "COLORIZE_CHROMA_BLUR": _farb_attr("chroma_blur"),
-    "COLORIZE_MONO_THRESHOLD": _farb_attr("schwelle"),
     "COLORIZE_PROMPT": ((lambda app: None), _farb_attr("prompt", lambda w: w.strip() or STANDARD_PROMPT)[1]),
     "COLORIZE_KEEP_RAW": _farb_attr("roh_behalten"),
     "MAX_BEST": ((lambda app: app.auswahl.max_best), (lambda app, w: setattr(app.auswahl, "max_best", w))),
@@ -350,7 +345,7 @@ def _eingabe(app, feld, d):
         if feld.art == "wahl":
             optionen = list(feld.wahl)
         else:
-            leer = "– zuletzt gewählter –" if feld.art == "workflow" else "– wie beim Verbessern –"
+            leer = "– zuletzt gewählter –" if feld.art == "workflow" else "– der in der Lupe gewählte –"
             optionen = [("", leer)] + [(w["datei"], w["name"] + ("" if w["farbe"] or feld.art == "workflow"
                                                                   else " (kein Prompt gefunden)"))
                                        for w in _workflows(app).brauchbar()]
@@ -388,7 +383,7 @@ def einstellungen_seite(app):
         if schluessel == "kolorierung" and not _farbe(app):
             zusatz = ('<p class="hilfe0 warn">' + ("Verbessern ist aus (COMFYUI = 0) – die Werte gelten nach dem "
                                                      "Neustart." if not app.verbesserer else
-                                                     "ffmpeg fehlt – ohne ffmpeg gibt es keine Kolorierung.") + "</p>")
+                                                     "ffmpeg fehlt – ohne ffmpeg gibt es kein Kolorieren.") + "</p>")
         if schluessel == "verbessern":
             zusatz = _workflow_html(app)
         abschnitte.append(

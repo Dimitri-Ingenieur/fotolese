@@ -1,15 +1,16 @@
-"""fotolese.web.kolorieren – Kolorierung als zweiter ComfyUI-Lauf nach der Restaurierung, danach Luma-Lock mit ffmpeg.
+"""fotolese.web.kolorieren – Fotos mit ComfyUI kolorieren, danach Luma-Lock mit ffmpeg.
 
-Pass 2 nimmt denselben Workflow wie die Restaurierung oder einen eigenen (FARBE_WORKFLOW; je Auftrag eine Kopie):
-Eingang ist die restaurierte Fassung, der Prompt die Kolorier-Anweisung (dazu Farbhinweise), der Seed neu, die
-Restore-LoRA aus oder schwach, der Dateiname eigen. Das Ergebnis kommt nur vom Speicher-Knoten. Der Prompt ist der
-erste Text-Encoder vor dem Speicher-Knoten (Qwen, CLIP Text Encode für SD/SDXL/Flux …), nie der negative; ein
-Knoten mit „fotolese“ im Titel legt ihn fest. Der Luma-Lock nimmt die Helligkeit (Y) aus der Restaurierung und
-nur die Farbe (Cb/Cr) aus Pass 2: Details, Gesichter und Tonwerte bleiben 1:1, ein Versatz durch das Neuzeichnen
-stört nicht. Bildverarbeitung nur mit ffmpeg/ffprobe; fehlen sie, ist die Kolorierung aus.
+Kolorieren ist ein eigener Schritt in der Lupe, unabhängig vom Verbessern: Es färbt das gezeigte Foto ein – das
+Original direkt oder eine verbesserte Fassung. Genommen wird der Workflow FARBE_WORKFLOW, sonst der in der Lupe
+gewählte, wenn er einen Prompt-Text hat (je Auftrag eine Kopie): Eingang ist das Foto, der Prompt die
+Kolorier-Anweisung (dazu Farbhinweise), der Seed neu, die Restore-LoRA aus oder schwach, der Dateiname eigen. Das
+Ergebnis kommt nur vom Speicher-Knoten. Der Luma-Lock nimmt die Helligkeit (Y) aus dem Eingangsfoto und nur die Farbe
+(Cb/Cr) aus ComfyUI: Details, Gesichter und Tonwerte bleiben 1:1, ein Versatz durch das Neuzeichnen stört nicht. Der
+Prompt ist der erste Text-Encoder vor dem Speicher-Knoten (Qwen, CLIP Text Encode für SD/SDXL/Flux …), nie der
+negative; ein Knoten mit „fotolese“ im Titel legt ihn fest. Bildverarbeitung nur mit ffmpeg/ffprobe; fehlen sie,
+ist das Kolorieren aus.
 """
 import json
-import re
 import shutil
 import subprocess
 
@@ -17,14 +18,13 @@ STANDARD_PROMPT = ("Colorize this black-and-white photo with natural, realistic 
                    "period-appropriate colors for clothing, objects and background, neutral white balance without sepia "
                    "or yellow cast. Keep the same composition, framing, people, facial features, lighting and all details "
                    "exactly; change only the colors.")
-MODI = ("off", "on", "auto")
 MAX_HINWEIS = 300
 OHNE_PROMPT = ("kein Prompt-Text gefunden (Text-Encoder vor dem Speicher-Knoten) oder nicht genau ein Speicher-Knoten. "
                "Den Prompt-Knoten in ComfyUI im Titel mit „fotolese“ kennzeichnen.")
 
 
 class FarbFehler(Exception):
-    """Fehler in Pass 2 oder ffmpeg – die Restaurierung bleibt gültig."""
+    """Fehler beim Kolorieren (ffmpeg) mit einem Text für die Oberfläche."""
 
 
 TEXT_FELDER = ("prompt", "text", "t5xxl", "clip_l", "text_g", "text_l")  # Prompt-Eingänge von Text-Encodern
@@ -105,9 +105,9 @@ def _restore_lora(k):
 
 
 def farb_ziele(knoten):
-    """Wo Pass 2 eingreift: die Prompt-Felder [(Knoten, Eingang)], der Speicher-Knoten und die Knoten mit einer
-    Restore-LoRA. Den Prompt findet sie über einen Knoten mit „fotolese“ im Titel, sonst als ersten Text-Encoder
-    vor dem Speicher-Knoten (nicht den negativen), zur Not über einen Eingang „prompt“.
+    """Wo das Kolorieren eingreift: die Prompt-Felder [(Knoten, Eingang)], der Speicher-Knoten und die Knoten mit
+    einer Restore-LoRA. Den Prompt findet sie über einen Knoten mit „fotolese“ im Titel, sonst als ersten
+    Text-Encoder vor dem Speicher-Knoten (nicht den negativen), zur Not über einen Eingang „prompt“.
     None, wenn kein Prompt zu finden ist oder es nicht genau einen Speicher-Knoten gibt."""
     speicher = [nid for nid, k in knoten.items() if "save" in str(k["class_type"]).lower()]
     if len(speicher) != 1:
@@ -155,13 +155,11 @@ def lora_setzen(knoten, staerke):
 
 
 class Kolorierung:
-    """Einstellungen (COLORIZE_…) und die ffmpeg-Schritte: Größe, Monochrom-Prüfung, Luma-Lock."""
+    """Einstellungen (COLORIZE_…) und die ffmpeg-Schritte: Größe, Luma-Lock."""
 
-    def __init__(self, standard="off", restore_lora=0.0, luma_lock=True, chroma_blur=0.0, schwelle=10.0, prompt="",
-                 roh_behalten=False):
-        self.standard = standard if standard in MODI else "off"
+    def __init__(self, restore_lora=0.0, luma_lock=True, chroma_blur=0.0, prompt="", roh_behalten=False):
         self.restore_lora, self.luma, self.chroma_blur = max(0.0, restore_lora), luma_lock, max(0.0, chroma_blur)
-        self.schwelle, self.prompt, self.roh_behalten = schwelle, prompt.strip() or STANDARD_PROMPT, roh_behalten
+        self.prompt, self.roh_behalten = prompt.strip() or STANDARD_PROMPT, roh_behalten
         self.ffmpeg, self.ffprobe = shutil.which("ffmpeg"), shutil.which("ffprobe")
         self.version, self.neue_syntax, self.grund = "", True, ""
         if not (self.ffmpeg and self.ffprobe):
@@ -201,18 +199,9 @@ class Kolorierung:
         except ValueError:
             raise FarbFehler(f"ffprobe kennt die Größe nicht ({aus[:60]}).") from None
 
-    def streuung(self, pfad):
-        """Farbstreuung: max(UHIGH−ULOW, VHIGH−VLOW) aus signalstats (10./90. Perzentil). Klein = Schwarzweiß oder
-        Sepia – ein Farbstich verschiebt nur den Mittelwert, nicht die Streuung."""
-        aus = self._lauf([self.ffmpeg, "-v", "error", "-i", pfad, "-vf",
-                          "format=yuv444p,signalstats,metadata=print:file=-", "-f", "null", "-"])
-        werte = {k: float(v) for k, v in re.findall(r"lavfi\.signalstats\.(ULOW|UHIGH|VLOW|VHIGH)=([\d.]+)", aus)}
-        if len(werte) < 4:
-            raise FarbFehler("ffmpeg signalstats lieferte keine Werte.")
-        return max(werte["UHIGH"] - werte["ULOW"], werte["VHIGH"] - werte["VLOW"])
-
     def luma_lock(self, restauriert, roh, ziel):
-        """Y aus der Restaurierung, Cb/Cr aus Pass 2 (auf deren Größe skaliert); 16 Bit gegen Rundungsfehler."""
+        """Y aus dem Eingangsfoto (restauriert), Cb/Cr aus dem Bild von ComfyUI (roh, auf die Größe des Eingangs
+        skaliert); 16 Bit gegen Rundungsfehler."""
         breite, hoehe = self.groesse(restauriert)
         farbe = f"[1:v]scale={breite}:{hoehe}:flags=lanczos,format=yuv444p16le,extractplanes=u+v"
         if self.chroma_blur > 0:  # gegen Farbsäume durch Restversatz

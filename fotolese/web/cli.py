@@ -52,9 +52,10 @@ Verbessern (ComfyUI, z. B. auf demselben Rechner, Port 8188):
   Original bleibt. Danach zeigt der Schieber Vorher/Nachher (Taste V); nach dem Neuladen steht die Fassung als
   eigene Kachel hinter dem Original und lässt sich wie jedes Foto mit Stern markieren. Workflows: in ComfyUI mit
   „Export (API)“ speichern und in den Ordner workflows neben bestof.py legen (WORKFLOWS); jede Datei = eine Wahl.
-  Kolorierung (braucht ffmpeg): „+ Kolorierung“ färbt nach der Restaurierung in einem zweiten Lauf ein, „wenn S/W“
-  nur Schwarzweiß und Sepia; dazu optional Farbhinweise. Ergebnis <Name>_<Workflow>_koloriert.png – Helligkeit und
-  Details aus der Restaurierung (Luma-Lock), nur die Farbe aus dem zweiten Lauf.
+  Kolorieren (braucht ffmpeg) ist ein eigener Knopf „◐ Kolorieren“ in der Lupe: färbt das gezeigte Foto ein – das
+  Original direkt oder eine verbesserte Fassung –, optional mit Farbhinweisen. Ergebnis <Name>_koloriert.png im
+  Unterordner verbessert; Helligkeit und Details aus dem Foto (Luma-Lock), nur die Farbe von ComfyUI. Workflow:
+  FARBE_WORKFLOW, sonst der in der Lupe gewählte, wenn er einen Prompt-Text hat.
 Ordner zusammenfassen (Übersicht, Knopf „Ordner zusammenfassen“):
   Ordner anklicken (Umschalt = Bereich), „Zusammenfassen …“: alle Fotos kommen in den Zielordner (vorgewählt die
   kleinste Nummer: 0004, 0005, 0006 -> 0004), samt NEF, Begleitdateien und verbesserten Fassungen; gleiche Namen
@@ -66,7 +67,7 @@ Fotos verschieben (Ordnerseite, Knopf „Fotos verschieben …“):
   Ordnernummer) oder Nummer eines vorhandenen Ordners + „In diesen Ordner“. NEF, Begleitdateien, Fassungen, Sterne,
   Alben, Jahr und Gesichter wandern mit; „Rückgängig“ in der Meldung, ein leerer Ordner verschwindet.
 Einstellungen (Seite „Einstellungen“):
-  Ähnlichkeit beim Import, Workflows (Vorwahl, eigener für die Kolorierung, hochladen), Kolorierung, Anzeige,
+  Ähnlichkeit beim Import, Workflows (Vorwahl, eigener fürs Kolorieren, hochladen), Kolorieren, Anzeige,
   Personen, Import – geschrieben in bestof.conf, gültig sofort. „Neu gruppieren“ gruppiert dort das ganze Archiv
   mit den Werten neu: erst Vorschau, dann ausführen, „Letzten Umzug rückgängig“ stellt alles wieder her
   (Protokoll in SORTIERT/.bestof-umzug/). ComfyUI-Adresse und Hochladen nur an diesem Rechner.
@@ -104,7 +105,7 @@ Aufruf (Conda-Umgebung von fotosort.py):
 
 Tasten im Ordner:  ← / →  voriger / nächster Ordner,  N  nächster Ordner ohne Stern
 Tasten in der Lupe: ← / →  Bild,  Leertaste / S  Stern,  Entf  Papierkorb,  G  Gesichter zeigen,  J  Jahr ändern,
-                    V  Vorher/Nachher (verbesserte Fassung),  Esc  schließen,
+                    V  Vorher/Nachher (verbesserte oder kolorierte Fassung),  Esc  schließen,
                     A  Album: ins gewählte Album aufnehmen/herausnehmen, sonst Alben zuordnen
                     (Namensschild anklicken = benennen: ganze Gruppe oder nur dieses Gesicht;
                      Gesicht fehlt = bei eingeblendeten Gesichtern ins Gesicht klicken)
@@ -143,14 +144,12 @@ Umgebungsvariablen (Standard in Klammern):
   COMFYUI    (http://127.0.0.1:8188)  ComfyUI für „Verbessern“; 0 = aus
   WORKFLOWS  (workflows neben bestof.py)  Ordner mit Workflows im API-Format (ComfyUI: Export (API))
   VERBESSERN_WORKFLOW ()   in der Lupe vorgewählter Workflow (Dateiname); leer = der zuletzt gewählte
-  FARBE_WORKFLOW ()        eigener Workflow für die Kolorierung; leer = derselbe wie beim Verbessern
-  COLORIZE_DEFAULT (off)   Kolorierung vorgewählt: off | on | auto (nur monochrome Fotos)
-  COLORIZE_RESTORE_LORA (0)  Restore-LoRA im zweiten Lauf: 0 = aus, 0.3–0.5 bei Farbsäumen
-  COLORIZE_LUMA_LOCK (1)   0 = Bild des zweiten Laufs ohne Luma-Lock übernehmen
+  FARBE_WORKFLOW ()        Workflow für „Kolorieren“; leer = der in der Lupe gewählte (braucht einen Prompt-Text)
+  COLORIZE_RESTORE_LORA (0)  Restore-LoRA beim Kolorieren: 0 = aus, 0.3–0.5 bei Farbsäumen
+  COLORIZE_LUMA_LOCK (1)   0 = Bild von ComfyUI ohne Luma-Lock übernehmen
   COLORIZE_CHROMA_BLUR (0) Weichzeichnen der Farbe (Sigma) gegen Farbsäume
-  COLORIZE_MONO_THRESHOLD (10)  Farbstreuung darunter gilt als monochrom (auto)
   COLORIZE_PROMPT ()       eigene Kolorier-Anweisung statt der eingebauten
-  COLORIZE_KEEP_RAW (0)    1 = Bild des zweiten Laufs zusätzlich als …_koloriert_roh.png behalten
+  COLORIZE_KEEP_RAW (0)    1 = Bild von ComfyUI zusätzlich als …_koloriert_roh.png behalten
   NACHZIEHEN (0.50)        beim Korrigieren eines Gesichts wandern Gesichter derselben Gruppe mit, die ihm
                            mindestens so ähnlich sind und ihm ähnlicher als dem Rest der Gruppe; 1 = aus
   ERKENN_PX  (1920)        Bildgröße für die Gesichtssuche (größer = findet kleinere Gesichter, langsamer);
@@ -312,9 +311,8 @@ def main(skript_ordner=None):
     workflow_ordner = os.path.abspath(os.path.expanduser(_env("WORKFLOWS", os.path.join(basis, "workflows"))))
     farbe = None
     if comfyui != "0":
-        farbe = Kolorierung(_env("COLORIZE_DEFAULT", "off").lower(), _env("COLORIZE_RESTORE_LORA", 0.0, float),
-                            _env("COLORIZE_LUMA_LOCK", "1") != "0", _env("COLORIZE_CHROMA_BLUR", 0.0, float),
-                            _env("COLORIZE_MONO_THRESHOLD", 10.0, float), _env("COLORIZE_PROMPT", ""),
+        farbe = Kolorierung(_env("COLORIZE_RESTORE_LORA", 0.0, float), _env("COLORIZE_LUMA_LOCK", "1") != "0",
+                            _env("COLORIZE_CHROMA_BLUR", 0.0, float), _env("COLORIZE_PROMPT", ""),
                             _env("COLORIZE_KEEP_RAW", "0") != "0")
     vorwahl, farb_workflow = _env("VERBESSERN_WORKFLOW", ""), _env("FARBE_WORKFLOW", "")
     app.verbesserer = (None if comfyui == "0" else
@@ -364,10 +362,12 @@ def main(skript_ordner=None):
                 print(f"Hinweis: Workflow {w['datei']} übersprungen – {w['fehler']}.")
         if farbe.bereit:
             koennen = [w["name"] for w in brauchbar if w["farbe"]]
-            print(f"Kolorierung: ffmpeg {farbe.version}, Standard {farbe.standard}, Restore-LoRA {farbe.restore_lora:g}"
-                  f"{', ohne Luma-Lock' if not farbe.luma else ''} · Workflows: {', '.join(koennen) or 'keiner geeignet'}")
+            fw = app.verbesserer.farb_wf()
+            print(f"Kolorieren: ffmpeg {farbe.version}, Restore-LoRA {farbe.restore_lora:g}"
+                  f"{', ohne Luma-Lock' if not farbe.luma else ''} · "
+                  + (f"Workflow {fw['name']}" if fw else f"Workflows: {', '.join(koennen) or 'keiner geeignet'}"))
         else:
-            print(f"Kolorierung aus: {farbe.grund} (z. B. sudo apt install ffmpeg).")
+            print(f"Kolorieren aus: {farbe.grund} (z. B. sudo apt install ffmpeg).")
     print(f"Adresse:  {adresse}")
     if netz:
         print(f"Heimnetz: http://{rechner.split('.')[0]}:{port}  ·  http://{lokale_ip()}:{port}"

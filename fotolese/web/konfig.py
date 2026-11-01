@@ -54,15 +54,13 @@ LERNEN_AB = 5            # neu lernen nach so vielen korrigierten Fehlzuordnunge
 # COMFYUI = http://127.0.0.1:8188   # 0 = Knopf „Verbessern“ aus
 # WORKFLOWS = /pfad/zu/workflows      # Standard: workflows neben bestof.py; Workflows im API-Format
 # VERBESSERN_WORKFLOW =               # in der Lupe vorgewählt, z. B. Foto_restore_API.json; leer = zuletzt gewählter
-# FARBE_WORKFLOW =                    # eigener Workflow für die Kolorierung; leer = derselbe wie beim Verbessern
-# Kolorierung (zweiter Lauf nach der Restaurierung, braucht ffmpeg):
-# COLORIZE_DEFAULT = off              # off / on / auto (auto = nur Schwarzweiß und Sepia); in der Lupe änderbar
+# FARBE_WORKFLOW =                    # Workflow für „Kolorieren“; leer = der in der Lupe gewählte (mit Prompt-Text)
+# Kolorieren (eigener Knopf in der Lupe: Original oder verbesserte Fassung einfärben, braucht ffmpeg):
 # COLORIZE_RESTORE_LORA = 0           # 0 = Restore-LoRA aus; 0.3–0.5 bei Farbsäumen
-# COLORIZE_LUMA_LOCK = 1              # 0 = Bild aus Pass 2 unverändert übernehmen
+# COLORIZE_LUMA_LOCK = 1              # 0 = Bild von ComfyUI unverändert übernehmen
 # COLORIZE_CHROMA_BLUR = 0            # Weichzeichnen der Farbe (Sigma) gegen Farbsäume
-# COLORIZE_MONO_THRESHOLD = 10        # Schwelle für auto: Farbstreuung darunter = monochrom
 # COLORIZE_PROMPT =                   # leer = eingebaute Anweisung (englisch)
-# COLORIZE_KEEP_RAW = 0               # 1 = Bild aus Pass 2 zusätzlich als …_koloriert_roh.png behalten
+# COLORIZE_KEEP_RAW = 0               # 1 = Bild von ComfyUI zusätzlich als …_koloriert_roh.png behalten
 
 # ---- Import ----
 # IMPORT = 1             # 0 = Seite „Import“ aus; importieren geht nur an diesem Rechner, nie aus dem Heimnetz
@@ -89,6 +87,19 @@ LERNEN_AB = 5            # neu lernen nach so vielen korrigierten Fehlzuordnunge
 LERN_SCHLUESSEL = ("PERSON_SCHWELLE", "ABSTAND")
 # Kommentarzeilen früherer Vorlagen, die heute Falsches sagen -> neue Fassung (Werte ändert das nie)
 VORLAGE_ALT = {
+    "# FARBE_WORKFLOW =                    # eigener Workflow für die Kolorierung; leer = derselbe wie beim Verbessern":
+        "# FARBE_WORKFLOW =                    # Workflow für „Kolorieren“; leer = der in der Lupe gewählte (mit "
+        "Prompt-Text)",
+    "# Kolorierung (zweiter Lauf nach der Restaurierung, braucht ffmpeg):":
+        "# Kolorieren (eigener Knopf in der Lupe: Original oder verbesserte Fassung einfärben, braucht ffmpeg):",
+    "# COLORIZE_DEFAULT = off              # off / on / auto (auto = nur Schwarzweiß und Sepia); in der Lupe änderbar":
+        "# (COLORIZE_DEFAULT gibt es nicht mehr: Kolorieren ist ein eigener Knopf in der Lupe)",
+    "# COLORIZE_MONO_THRESHOLD = 10        # Schwelle für auto: Farbstreuung darunter = monochrom":
+        "# (COLORIZE_MONO_THRESHOLD gibt es nicht mehr)",
+    "# COLORIZE_LUMA_LOCK = 1              # 0 = Bild aus Pass 2 unverändert übernehmen":
+        "# COLORIZE_LUMA_LOCK = 1              # 0 = Bild von ComfyUI unverändert übernehmen",
+    "# COLORIZE_KEEP_RAW = 0               # 1 = Bild aus Pass 2 zusätzlich als …_koloriert_roh.png behalten":
+        "# COLORIZE_KEEP_RAW = 0               # 1 = Bild von ComfyUI zusätzlich als …_koloriert_roh.png behalten",
     "# Umgebungsvariablen haben Vorrang (z. B. PORT=9000 python bestof.py …). Änderungen gelten nach dem Neustart.":
         "# Umgebungsvariablen haben Vorrang (z. B. PORT=9000 python bestof.py …). Von Hand geändert gilt nach dem "
         "Neustart;\n# die Seite „Einstellungen“ ändert die meisten Werte sofort.",

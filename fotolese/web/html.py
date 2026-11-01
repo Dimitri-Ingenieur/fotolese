@@ -188,7 +188,7 @@ kbd{font-family:var(--zahl);border:1px solid var(--linie);padding:0 5px;border-r
   box-shadow:0 1px 6px rgba(0,0,0,.5)}
 .vlabel{position:absolute;padding:1px 8px;font-size:13px;background:rgba(30,30,30,.82);border-radius:2px;text-decoration:none}
 .vlabel:hover{text-decoration:underline}
-.lupe .farbhinweis{width:16em;padding:5px 8px;background:var(--flaeche);border:1px solid var(--linie);border-radius:2px}
+.lupe .farbhinweis{width:11em;padding:5px 8px;background:var(--flaeche);border:1px solid var(--linie);border-radius:2px}
 .vergleich-an .flaeche{cursor:ew-resize;touch-action:none}
 .vstatus{position:absolute;right:12px;top:10px;margin:0;padding:5px 12px;font-size:13px;background:rgba(30,30,30,.88);
   border-radius:2px;z-index:2;pointer-events:none;max-width:70%}
@@ -859,8 +859,8 @@ if(vsKnopf&&vsLeiste){vsKnopf.addEventListener('click',()=>vsModus(!vsAn));
 """
 
 JS_VERBESSERN = """
-// Verbessern mit ComfyUI (Auftrag im Hintergrund) und Vorher/Nachher-Schieber in der Lupe
-const VW=D.verbessern||[],FARBE=D.kolorieren,farbWahl=lupe.querySelector('.farbwahl'),
+// Verbessern und Kolorieren mit ComfyUI (je ein Auftrag im Hintergrund) und Vorher/Nachher-Schieber in der Lupe
+const VW=D.verbessern||[],FARBE=D.kolorieren,farbKnopf=lupe.querySelector('.farb'),
  farbHinweis=lupe.querySelector('.farbhinweis'),wfWahl=lupe.querySelector('.wfwahl'),verbKnopf=lupe.querySelector('.verb'),
  vglKnopf=lupe.querySelector('.vgl'),vRegler=lupe.querySelector('.vregler'),nachherImg=lupe.querySelector('.nachher'),
  trenner=lupe.querySelector('.trenner'),vLabels=[...lupe.querySelectorAll('.vlabel')],vStatus=lupe.querySelector('.vstatus');
@@ -869,41 +869,38 @@ wfWahl.replaceChildren(...VW.map(w=>new Option(w.name,w.datei)));
 if(D.vorwahl&&VW.some(w=>w.datei===D.vorwahl))wfWahl.value=D.vorwahl;  // Einstellungen: fester Workflow
 else try{const m=localStorage.getItem('bestofWorkflow');if(m&&VW.some(w=>w.datei===m))wfWahl.value=m;}catch(_){}
 wfWahl.addEventListener('change',()=>{try{localStorage.setItem('bestofWorkflow',wfWahl.value);}catch(_){}verbLupe();});
-if(FARBE){let m=FARBE.standard;try{m=localStorage.getItem('bestofFarbe')||m;}catch(_){}farbWahl.value=m;}
-farbWahl.addEventListener('change',()=>{try{localStorage.setItem('bestofFarbe',farbWahl.value);}catch(_){}verbLupe();});
 function wfAktuell(){return VW.find(x=>x.datei===wfWahl.value)||VW[0];}
+function farbWf(){return FARBE?(FARBE.workflow||(VW.length&&wfAktuell().farbe?wfAktuell().name:null)):null;}  // wer koloriert
 function vPaar(b){return b.paar||(b.ng?[b.g,b.ng]:b.vg?[b.vg,b.g]:null);}  // [vorher, nachher]
 function origVon(g){return g.replace('/g/','/orig/').replace(/[?]v=.*$/,'');}
 function vJob(i){return Object.values(vJobs).find(j=>j.i===i&&j.s.laeuft);}
-function verbLupe(){if(aktiv<0)return;const b=D.bilder[aktiv],job=vJob(aktiv);
- verbKnopf.hidden=!VW.length;wfWahl.hidden=VW.length<2;verbKnopf.disabled=!!job;
- farbWahl.hidden=!(FARBE&&VW.length&&wfAktuell().farbe);farbHinweis.hidden=farbWahl.hidden||farbWahl.value==='off';
- verbKnopf.textContent=job?'Wird verbessert …':'✦ Verbessern';vglKnopf.hidden=!vPaar(b);
- vglKnopf.setAttribute('aria-pressed',vergleich);vStatus.hidden=!job;
+function verbLupe(){if(aktiv<0)return;const b=D.bilder[aktiv],job=vJob(aktiv),fw=farbWf();
+ verbKnopf.hidden=!VW.length;wfWahl.hidden=VW.length<2;verbKnopf.disabled=farbKnopf.disabled=!!job;
+ farbKnopf.hidden=farbHinweis.hidden=!fw;farbKnopf.title='Dieses Foto kolorieren'+(fw?' mit „'+fw+'“':'')+
+  ' – Original oder verbesserte Fassung; das Ergebnis kommt in den Unterordner verbessert';
+ verbKnopf.textContent=job&&job.s.art!=='kolorieren'?'Wird verbessert …':'✦ Verbessern';
+ farbKnopf.textContent=job&&job.s.art==='kolorieren'?'Wird koloriert …':'◐ Kolorieren';
+ vglKnopf.hidden=!vPaar(b);vglKnopf.setAttribute('aria-pressed',vergleich);vStatus.hidden=!job;
  if(job){const s=job.s,sek=Math.round((Date.now()-job.t0)/1000);
-  vStatus.textContent='Verbessern mit „'+s.workflow+'“: '+(s.platz?s.phase.replace('Warteschlange','wartet, Platz '+
-   s.platz):s.phase)+' · '+Math.floor(sek/60)+':'+String(sek%60).padStart(2,'0');}}
-async function verbessern(){if(aktiv<0||!VW.length||vJob(aktiv))return;
- const i=aktiv,b=D.bilder[i],w=wfAktuell(),farbe=farbWahl.hidden?'off':farbWahl.value;
- const [ok,j]=await post('/api/verbessern',{pfad:b.ordner+'/'+b.id,workflow:w.datei,kolorieren:farbe,
-  farbhinweise:farbe==='off'?'':farbHinweis.value.trim()});
- if(!ok){meldung(j.fehler||'Verbessern ließ sich nicht starten.',true);return;}
- vJobs[j.auftrag]={i,t0:Date.now(),s:{laeuft:true,phase:'Hochladen',workflow:w.name}};meldung(j.meldung);verbLupe();vAbfragen();}
+  vStatus.textContent=(s.art==='kolorieren'?'Kolorieren mit „':'Verbessern mit „')+s.workflow+'“: '+(s.platz?
+   s.phase.replace('Warteschlange','wartet, Platz '+s.platz):s.phase)+' · '+Math.floor(sek/60)+':'+String(sek%60).padStart(2,'0');}}
+async function verbessern(art){if(aktiv<0||!VW.length&&art==='verbessern'||vJob(aktiv))return;
+ const i=aktiv,b=D.bilder[i],w=VW.length?wfAktuell():null;
+ const [ok,j]=await post('/api/verbessern',{pfad:b.ordner+'/'+b.id,workflow:w?w.datei:'',art,
+  farbhinweise:art==='kolorieren'?farbHinweis.value.trim():''});
+ if(!ok){meldung(j.fehler||(art==='kolorieren'?'Kolorieren':'Verbessern')+' ließ sich nicht starten.',true);return;}
+ vJobs[j.auftrag]={i,t0:Date.now(),s:{laeuft:true,phase:'Hochladen',workflow:j.workflow||(w&&w.name)||'',art}};
+ meldung(j.meldung);verbLupe();vAbfragen();}
 async function vAbfragen(){clearTimeout(vTimer);const ids=Object.keys(vJobs).filter(k=>vJobs[k].s.laeuft);if(!ids.length)return;
  try{const r=await fetch('/api/verbessern?'+ids.map(k=>'id='+encodeURIComponent(k)).join('&'));const j=await r.json();
   for(const k of ids){const s=(j.auftraege||{})[k]||{laeuft:false,fehler:'bestof kennt den Auftrag nicht mehr (neu gestartet?).'};
-   vJobs[k].s=Object.assign({workflow:vJobs[k].s.workflow},s);
-   if(s.laeuft&&s.ergebnis&&!vJobs[k].zwischen)vZwischen(k);if(!s.laeuft)vFertig(k);}}catch(_){}
+   vJobs[k].s=Object.assign({workflow:vJobs[k].s.workflow,art:vJobs[k].s.art},s);if(!s.laeuft)vFertig(k);}}catch(_){}
  verbLupe();vTimer=setTimeout(vAbfragen,1500);}
-function vZwischen(k){const {i,s}=vJobs[k];vJobs[k].zwischen=true;  // Pass 1 fertig, Kolorierung läuft noch
- D.bilder[i].ng=s.ergebnis.g;meldung('Restauriert: '+s.ergebnis.name+' – die Kolorierung läuft noch.');
- if(aktiv===i)vergleichAn(true);}
-function vFertig(k){const {i,s}=vJobs[k],b=D.bilder[i];
- if(s.fehler){meldung('Verbessern fehlgeschlagen: '+s.fehler,true);return;}
- b.ng=s.ergebnis.g;if(s.farbe)b.paar=[s.ergebnis.g,s.farbe.g];  // Vergleich: restauriert <-> koloriert
- meldung((s.farbe?'Restauriert und koloriert: '+s.farbe.name:'Verbessert: '+s.ergebnis.name)+
-  (s.farbfehler?' – Kolorierung fehlgeschlagen: '+s.farbfehler:s.farbinfo?' – '+s.farbinfo:
-   ' – im Ordner direkt hinter dem Original.'),!!s.farbfehler,['Ordner neu laden',()=>location.reload()]);
+function vFertig(k){const {i,s}=vJobs[k],b=D.bilder[i],farb=s.art==='kolorieren';
+ if(s.fehler){meldung((farb?'Kolorieren':'Verbessern')+' fehlgeschlagen: '+s.fehler,true);return;}
+ b.ng=s.ergebnis.g;b.paar=[b.g,s.ergebnis.g];  // Vergleich: dieses Foto <-> Ergebnis
+ meldung((farb?'Koloriert: ':'Verbessert: ')+s.ergebnis.name+' – im Ordner direkt hinter dem Foto.',false,
+  ['Ordner neu laden',()=>location.reload()]);
  if(aktiv===i)vergleichAn(true);}
 function vergleichAn(an){const b=aktiv>=0?D.bilder[aktiv]:null,p=an&&b?vPaar(b):null;
  if(!p){vergleichZu(true);return;}
@@ -929,7 +926,9 @@ flaeche.addEventListener('pointermove',ev=>{if(vergleich&&vZiehen)vSetzen(ev);})
 ['pointerup','pointercancel'].forEach(t=>flaeche.addEventListener(t,()=>{vZiehen=false;}));
 vRegler.addEventListener('input',()=>{vAnteil=+vRegler.value;vLagen();});
 nachherImg.addEventListener('load',vLagen);lupeImg.addEventListener('load',vLagen);window.addEventListener('resize',vLagen);
-verbKnopf.addEventListener('click',verbessern);vglKnopf.addEventListener('click',()=>vergleichAn(!vergleich));
+verbKnopf.addEventListener('click',()=>verbessern('verbessern'));farbKnopf.addEventListener('click',()=>verbessern('kolorieren'));
+farbHinweis.addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();verbessern('kolorieren');}});
+vglKnopf.addEventListener('click',()=>vergleichAn(!vergleich));
 """
 
 
@@ -1050,9 +1049,13 @@ def bild_daten(app, ordner, bilder):
 
 
 def farb_daten(app):
-    """Für die Lupe: Kolorierung möglich? Dann {"standard": off|on|auto} (COLORIZE_DEFAULT), sonst None."""
-    farbe = app.verbesserer.farbe if app.verbesserer else None
-    return {"standard": farbe.standard} if farbe else None
+    """Für die Lupe: Kolorieren möglich (ffmpeg da)? Dann {"workflow": Name von FARBE_WORKFLOW oder None – dann
+    kolorieren die Workflows mit Prompt-Text}, sonst None."""
+    v = app.verbesserer
+    if not (v and v.farbe):
+        return None
+    fw = v.farb_wf()
+    return {"workflow": fw["name"] if fw else None}
 
 
 def fassung_name(name, original):
@@ -1167,12 +1170,12 @@ LUPE_HTML = ('<div class="lupe" hidden role="dialog" aria-label="Lupe"><div clas
              '<button class="knopf vor" type="button" aria-label="Nächstes Bild">›</button>'
              + STERN_KNOPF + korb_knopf(" – Taste Entf") +
              '<select class="wfwahl" aria-label="Workflow zum Verbessern" hidden></select>'
-             '<select class="farbwahl" aria-label="Kolorierung" hidden><option value="off">ohne Kolorierung</option>'
-             '<option value="on">+ Kolorierung</option><option value="auto">+ Kolorierung, wenn S/W</option></select>'
-             '<input class="farbhinweis" maxlength="300" autocomplete="off" aria-label="Farbhinweise" hidden '
-             'placeholder="Farbhinweise, z. B. Kleid dunkelblau">'
-             '<button class="knopf verb" type="button" hidden title="Mit ComfyUI verbessern – das Ergebnis kommt in den '
-             'Unterordner verbessert, das Original bleibt">✦ Verbessern</button>'
+             '<button class="knopf verb" type="button" hidden title="Dieses Foto mit dem gewählten Workflow verbessern – '
+             'das Ergebnis kommt in den Unterordner verbessert, das Foto bleibt">✦ Verbessern</button>'
+             '<input class="farbhinweis" maxlength="300" autocomplete="off" aria-label="Farbhinweise fürs Kolorieren" '
+             'hidden placeholder="Farbhinweise (optional)">'
+             '<button class="knopf farb" type="button" hidden title="Dieses Foto kolorieren – Original oder verbesserte '
+             'Fassung; das Ergebnis kommt in den Unterordner verbessert">◐ Kolorieren</button>'
              '<button class="knopf vgl" type="button" aria-pressed="false" hidden title="Vorher/Nachher vergleichen '
              '(Taste V)">Vergleich</button>'
              '<input class="vregler" type="range" min="0" max="100" step="0.5" value="50" aria-label="Vorher/Nachher" hidden>'
@@ -1220,8 +1223,8 @@ def bogen_hilfe(app, einordner=False):
                   f'„{VERBESSERT}“ und steht nach dem Neuladen als eigene Kachel hinter dem Original.'
                   if app.verbesserer else '')
     if farb_daten(app):
-        verbessern += (' Mit „+ Kolorierung“ folgt ein zweiter Lauf, der Schwarzweiß einfärbt (…_koloriert.png); '
-                       '„wenn S/W“ färbt nur, was keine Farbe hat.')
+        verbessern += (' „◐ Kolorieren“ färbt das gezeigte Foto ein – das Original direkt oder eine verbesserte Fassung '
+                       '(…_koloriert.png); Helligkeit und Details bleiben die des Fotos.')
     if not app.index:
         return f'<p class="hilfe">{text}<kbd>Esc</kbd> schließen.{verbessern}{VERSCHIEBEN_HILFE * einordner}</p>'
     return (f'<p class="hilfe">{text}<kbd>G</kbd> Gesichter (Namensschild anklicken = benennen, fehlt eins: ins '

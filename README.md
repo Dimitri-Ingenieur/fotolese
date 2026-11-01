@@ -32,13 +32,14 @@ auch selbst aufrufen – dann müssen Sie fotosort.py nicht von Hand starten.
   nur im Dateimanager ([mehr](#papierkorb))
 - im Heimnetz erreichbar, z. B. `http://tigris:8765` vom Tablet; importieren nur am Rechner selbst
   ([mehr](#im-heimnetz))
-- Verbessern mit ComfyUI: Workflow wählen, die Fassung kommt in den Unterordner `verbessert`,
-  Vorher/Nachher-Schieber in der Lupe; wahlweise danach kolorieren ([mehr](#verbessern-mit-comfyui))
+- Verbessern und Kolorieren mit ComfyUI, zwei eigene Knöpfe in der Lupe: Fassungen kommen in den Unterordner
+  `verbessert`, Vorher/Nachher-Schieber; koloriert wird das Original direkt oder eine verbesserte Fassung
+  ([mehr](#verbessern-mit-comfyui))
 - Ordner zusammenfassen (z. B. 0004, 0005, 0006 → 0004), Fotos, die nicht in einen Ordner gehören, in eine
   eigene Gruppe verschieben und das ganze Archiv mit neuen Ähnlichkeitswerten neu gruppieren – Sterne, Alben,
   Jahr, Gesichter und Fassungen wandern mit, „Rückgängig“ inklusive; dazu die Werte, mit denen fotosort die
   Ordner selbst zusammengelegt hätte ([mehr](#ordner-zusammenfassen-und-neu-gruppieren))
-- Seite „Einstellungen“: Ähnlichkeit beim Import, Workflows (auch hochladen), Kolorierung, Anzeige, Personen
+- Seite „Einstellungen“: Ähnlichkeit beim Import, Workflows (auch hochladen), Kolorieren, Anzeige, Personen
   ([mehr](#einstellungen))
 - Gesichtserkennung auf der Grafikkarte, wenn eine nutzbar ist – NVIDIA, AMD, Intel, Apple ([GPU](#gpu))
 - Seite „Import“: Ordner wählen – bestof.py startet fotosort.py, das ihn ins Archiv kopiert ([mehr](#import-im-browser))
@@ -247,7 +248,7 @@ ist, legt `VERBESSERN_WORKFLOW` fest (leer = der zuletzt gewählte). bestof.py s
 Eingang `image`; bei mehreren den, in dessen Titel „fotolese“ steht), würfelt den Seed jedes Mal neu
 und holt das Bild des Speicher-Knotens (`Save Image`). Ein Workflow im normalen statt im API-Format
 wird beim Start mit Hinweis übersprungen. Mitgeliefert sind „Foto restore“ (Qwen) und „Foto restore
-flux2“ (Flux 2), beide auch für die Kolorierung (siehe
+flux2“ (Flux 2), beide auch zum Kolorieren (siehe
 [Daten und Modelle von Dritten](#daten-und-modelle-von-dritten)).
 
 ComfyUI auf einem anderen Rechner: `COMFYUI = http://rechner:8188`; `COMFYUI = 0` schaltet die Funktion
@@ -255,43 +256,45 @@ ab. Fehler – ComfyUI nicht erreichbar, Modell oder Knoten fehlt – erscheinen
 Oberfläche. ComfyUI legt die hochgeladenen Fotos in seinem Ordner `input` ab (`fotolese_…`), die
 Ergebnisse zusätzlich in `output/fotolese/`; dort darf man aufräumen.
 
-#### Kolorierung
+#### Kolorieren
 
-Neben dem Workflow steht die Wahl **ohne Kolorierung / + Kolorierung / + Kolorierung, wenn S/W**,
-dazu ein Feld für Farbhinweise (z. B. „the dress is dark blue“, höchstens 300 Zeichen). Mit Kolorierung
-folgt nach der Restaurierung ein zweiter Lauf desselben Workflows auf dem restaurierten Bild – mit
-Kolorier-Anweisung, neuem Seed und abgeschalteter Restore-LoRA (sie hielte das Bild grau). Das
-restaurierte Bild ist sofort zu sehen, der Stand zeigt „Kolorierung: wartet …“ bzw. „Kolorierung läuft“.
-Danach vergleicht der Schieber restauriert ↔ koloriert; die Schilder „Vorher ↗“ und „Nachher ↗“ öffnen
-die Dateien. Gespeichert wird `…/verbessert/<Name>_<Workflow>_koloriert.png`, als Kachel direkt hinter
-der restaurierten Fassung.
+Kolorieren ist ein eigener Knopf in der Lupe, unabhängig vom Verbessern: **◐ Kolorieren** färbt das
+gerade gezeigte Foto ein. Das kann das Original sein – dann wird es direkt koloriert – oder eine schon
+verbesserte Fassung, etwa nach „Foto restore“. Daneben steht ein Feld für Farbhinweise (z. B. „the dress
+is dark blue“, höchstens 300 Zeichen, <kbd>Enter</kbd> startet). „✦ Verbessern“ dagegen verbessert nur
+und färbt nichts ein.
 
-Der **Luma-Lock** nimmt Helligkeit, Details und Gesichter 1:1 aus der Restaurierung und aus dem
-zweiten Lauf nur die Farbe; dass Qwen beim Neuzeichnen um ein paar Pixel verrutscht, stört so nicht.
-„wenn S/W“ prüft die Farbstreuung des restaurierten Bildes und färbt nur Schwarzweiß und Sepia ein.
-Scheitert die Kolorierung, bleibt die Restaurierung erhalten und die Meldung nennt den Grund.
+bestof.py lädt das Foto zu ComfyUI und setzt statt des Prompts die Kolorier-Anweisung ein, würfelt einen
+neuen Seed und schaltet die Restore-LoRA ab (sie hielte das Bild grau). Der Stand zeigt „Kolorieren mit
+„…“: wartet …“ bzw. „läuft“. Danach vergleicht der Schieber das Foto mit der kolorierten Fassung; die
+Schilder „Vorher ↗“ und „Nachher ↗“ öffnen die Dateien. Gespeichert wird
+`…/verbessert/<Name>_koloriert.png` – für ein Original also `IMG_0001_koloriert.png`, für eine
+Restaurierung `IMG_0001_Foto_restore_koloriert.png` –, als Kachel direkt hinter dem Foto, mit Datum, Ort,
+Jahr und Alben des Fotos.
+
+Der **Luma-Lock** nimmt Helligkeit, Details und Gesichter 1:1 aus dem Foto und von ComfyUI nur die Farbe;
+dass das Modell beim Neuzeichnen um ein paar Pixel verrutscht oder die Größe ändert, stört so nicht.
 
 Dafür braucht der Rechner `ffmpeg` (unter Ubuntu `sudo apt install ffmpeg`); fehlt es, bietet bestof.py
-keine Kolorierung an und sagt das beim Start. Kolorieren kann jeder Workflow mit genau einem
-Speicher-Knoten und einem Prompt-Text – der mitgelieferte „Foto restore“ (Qwen) ebenso wie Workflows mit
-„CLIP Text Encode“ für SD, SDXL oder Flux. Als Prompt gilt der erste Text-Encoder auf dem Weg vom
+kein Kolorieren an und sagt das beim Start. Koloriert wird mit dem Workflow `FARBE_WORKFLOW`; ist keiner
+eingestellt, mit dem in der Lupe gewählten. Kolorieren kann jeder Workflow mit genau einem Speicher-Knoten
+und einem Prompt-Text – der mitgelieferte „Foto restore“ (Qwen) ebenso wie „Foto restore flux2“ und andere
+mit „CLIP Text Encode“ für SD, SDXL oder Flux. Als Prompt gilt der erste Text-Encoder auf dem Weg vom
 Speicher-Knoten zurück zum Sampler, nie der negative; liegt die Erkennung daneben, den richtigen Knoten
-in ComfyUI im Titel mit „fotolese“ kennzeichnen. Soll der zweite Lauf einen anderen Workflow nehmen als
-die Restaurierung, legt ihn `FARBE_WORKFLOW` fest; dann geht die Kolorierung nach jedem Workflow. Einstellungen in `bestof.conf` oder auf der Seite
+in ComfyUI im Titel mit „fotolese“ kennzeichnen. Einstellungen in `bestof.conf` oder auf der Seite
 [Einstellungen](#einstellungen):
 
 | Einstellung | Standard | Bedeutung |
 |---|---|---|
-| `COLORIZE_DEFAULT` | `off` | vorgewählt: `off`, `on` oder `auto`; in der Lupe änderbar |
+| `FARBE_WORKFLOW` | leer | Workflow fürs Kolorieren; leer = der in der Lupe gewählte (mit Prompt-Text) |
 | `COLORIZE_RESTORE_LORA` | `0` | 0 = Restore-LoRA (Name mit „restore“, in jedem LoRA-Loader) aus; 0.3–0.5 bei Farbsäumen |
-| `COLORIZE_LUMA_LOCK` | `1` | 0 = Bild des zweiten Laufs unverändert übernehmen |
+| `COLORIZE_LUMA_LOCK` | `1` | 0 = Bild von ComfyUI unverändert übernehmen |
 | `COLORIZE_CHROMA_BLUR` | `0` | Farbe weichzeichnen (Sigma) gegen Farbsäume |
-| `COLORIZE_MONO_THRESHOLD` | `10` | Farbstreuung darunter gilt als monochrom (`auto`) |
 | `COLORIZE_PROMPT` | leer | eigene Kolorier-Anweisung statt der eingebauten |
-| `COLORIZE_KEEP_RAW` | `0` | 1 = Bild des zweiten Laufs als `…_koloriert_roh.png` behalten |
+| `COLORIZE_KEEP_RAW` | `0` | 1 = Bild von ComfyUI zusätzlich als `…_koloriert_roh.png` behalten |
 
-Das Terminal nennt je Auftrag Farbstreuung (bei `auto`), Seed und Ergebnis – damit lässt sich die
-Schwelle einstellen.
+Das Terminal nennt je Auftrag Workflow, Seed und Ergebnis. Frühere Versionen kannten noch die Wahl
+„+ Kolorierung“ beim Verbessern (`COLORIZE_DEFAULT`, `COLORIZE_MONO_THRESHOLD`); beides gibt es nicht mehr.
 
 ### Ordner zusammenfassen und neu gruppieren
 
@@ -350,10 +353,10 @@ Die Seite „Einstellungen“ zeigt die wichtigsten Werte aus `bestof.conf` und 
 - **Ähnlichkeit beim Import:** `SCHWELLE`, `SERIE_SEK`, `SERIE_SCHWELLE` und `EINZELN` gibt bestof.py an
   fotosort.py weiter – beim Import, bei der Analyse und bei „Neu gruppieren“ (darunter auf derselben Seite).
 - **Verbessern mit ComfyUI:** die ComfyUI-Adresse, der in der Lupe vorgewählte Workflow
-  (`VERBESSERN_WORKFLOW`) und ein eigener Workflow für die Kolorierung (`FARBE_WORKFLOW`). Die Liste zeigt
+  (`VERBESSERN_WORKFLOW`) und ein eigener Workflow fürs Kolorieren (`FARBE_WORKFLOW`). Die Liste zeigt
   jeden Workflow mit seinem Zustand; „Workflow hochladen …“ legt eine JSON-Datei im API-Format in den
   Ordner `workflows`.
-- **Kolorierung:** die Werte aus der Tabelle oben.
+- **Kolorieren:** die Werte aus der Tabelle oben.
 - **Anzeige, Personen, Import:** Sterne je Ordner, Ordner je Übersichtsseite, Umkreis für den Ortsfilter;
   Ähnlichkeit für dieselbe Person, Abstand, Lernen; Prozesse für fotosort.py.
 
@@ -446,7 +449,7 @@ fotolese/                    Projektordner
 │       ├── auswahl.py       Sterne je Ordner, Kopien in BestOf
 │       ├── papierkorb.py    Fotos nach Musor schieben und zurückholen, nie löschen
 │       ├── verbessern.py    Fotos mit ComfyUI verbessern, Fassung in <Ordner>/verbessert
-│       ├── kolorieren.py    Kolorierung: zweiter Lauf, Luma-Lock mit ffmpeg
+│       ├── kolorieren.py    Kolorieren: Prompt-Erkennung, Luma-Lock mit ffmpeg
 │       ├── alben.py         Alben: anlegen, Fotos zuordnen, für Filter und Oberfläche
 │       ├── index.py         SQLite-Index und Hintergrund-Indexer
 │       ├── gesichter.py     Gesichtserkennung (YuNet/SFace) im Prozess-Pool

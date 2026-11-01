@@ -8,8 +8,8 @@ als PNG in SORTIERT/<Ordner>/verbessert/<Name>_<Workflow>.png – mit dem EXIF d
 steckt dann schon im Bild) und der Workflow-Beschreibung, die ComfyUI ins PNG schreibt. Von Hand gesetztes Jahr
 und Alben übernimmt die neue Fassung vom Original.
 
-Wahlweise folgt eine Kolorierung (kolorieren.py): zweiter Lauf desselben Workflows auf der restaurierten Fassung,
-Ergebnis nach dem Luma-Lock als …_koloriert.png. Scheitert sie, bleibt die Restaurierung trotzdem gültig.
+Kolorieren ist ein eigener Auftrag (kolorieren.py): Er färbt das gezeigte Foto ein – Original oder verbesserte
+Fassung – und legt das Ergebnis nach dem Luma-Lock als <Name>_koloriert.png daneben.
 """
 import copy
 import errno
@@ -19,7 +19,6 @@ import os
 import random
 import re
 import secrets
-import shutil
 import tempfile
 import threading
 import time
@@ -33,7 +32,7 @@ from PIL import Image, ImageOps, PngImagePlugin
 
 from fotolese.web.konst import KOLORIERT, ORDNER_MUSTER, VERBESSERT
 from fotolese.web.konfig import anzeige, name_aus_id, url_id
-from fotolese.web.kolorieren import MAX_HINWEIS, MODI, OHNE_PROMPT, FarbFehler, farb_ziele, lora_setzen
+from fotolese.web.kolorieren import MAX_HINWEIS, OHNE_PROMPT, FarbFehler, farb_ziele, lora_setzen
 from fotolese.web.papierkorb import umzug_laeuft
 
 FRIST = 3600  # so lange wartet ein Auftrag höchstens auf das Ergebnis (Sekunden)
@@ -268,30 +267,24 @@ def speichern(app, ordner, name, roh, workflow, stamm=None, notiz=None, text_von
 
 
 class Auftrag(threading.Thread):
-    """Ein Foto mit einem Workflow verbessern: hochladen, in die Warteschlange, warten, abholen, speichern."""
+    """Ein Foto verbessern oder kolorieren: hochladen, in die Warteschlange, warten, abholen, speichern.
+    art „verbessern“: der Workflow, wie er ist. art „kolorieren“: Kolorier-Anweisung statt Prompt, danach Luma-Lock."""
 
-    def __init__(self, verbesserer, ordner, name, workflow, farbe="off", hinweise="", farb_wf=None):
+    def __init__(self, verbesserer, ordner, name, workflow, art="verbessern", hinweise=""):
         super().__init__(daemon=True)
         self.v, self.ordner, self.name, self.workflow = verbesserer, ordner, name, workflow
-        self.farbe, self.hinweise = farbe, hinweise  # Kolorierung: off/on/auto, Farbhinweise
-        self.farb_wf = farb_wf  # eigener Workflow für Pass 2 (FARBE_WORKFLOW) oder None = derselbe
+        self.art, self.hinweise = art, hinweise  # Farbhinweise nur beim Kolorieren
         self.id = secrets.token_urlsafe(9)
-        self.restauriert = None  # Archivname der Fassung aus Pass 1
-        self.notizen = []  # fürs Terminal: Streuung, Seed, Fehler der Kolorierung
-        self.status = {"id": self.id, "pfad": f"{ordner}/{url_id(name)}", "workflow": workflow["name"],
-                       "phase": "Hochladen", "platz": None, "laeuft": True, "fehler": "", "ergebnis": None,
-                       "farbmodus": farbe, "farbe": None, "farbfehler": "", "farbinfo": ""}
+        self.notizen = []  # fürs Terminal: Seed
+        self.status = {"id": self.id, "pfad": f"{ordner}/{url_id(name)}", "workflow": workflow["name"], "art": art,
+                       "phase": "Hochladen", "platz": None, "laeuft": True, "fehler": "", "ergebnis": None}
 
     def run(self):
         st = self.status
         try:
-            st["ergebnis"] = self._ausfuehren()
-            if self.farbe != "off":
-                if self.v.app.indexer:
-                    self.v.app.indexer.weiter.set()  # die Restaurierung schon einlesen, während Pass 2 läuft
-                self._kolorieren_sicher()
+            st["ergebnis"] = self._kolorieren() if self.art == "kolorieren" else self._ausfuehren()
             st["phase"] = "fertig"
-        except Fehler as fehler:
+        except (Fehler, FarbFehler) as fehler:
             st["fehler"] = str(fehler)
         except Exception as fehler:
             traceback.print_exc()
@@ -300,7 +293,8 @@ class Auftrag(threading.Thread):
             st["laeuft"] = False
             if st["ergebnis"] and self.v.app.indexer:
                 self.v.app.indexer.weiter.set()  # die neue Fassung gleich einlesen
-            print(f"Verbessern ({self.workflow['name']}): {self.ordner}/{anzeige(self.name)} – "
+            was = "Kolorieren" if self.art == "kolorieren" else "Verbessern"
+            print(f"{was} ({self.workflow['name']}): {self.ordner}/{anzeige(self.name)} – "
                   f"{st['fehler'] or 'gespeichert als ' + st['ergebnis']['name']}"
                   + "".join(f" · {n}" for n in self.notizen), flush=True)
 
@@ -368,39 +362,19 @@ class Auftrag(threading.Thread):
     def _abholen(self, eintrag, wf):
         roh = self._bild_holen(eintrag, wf)
         self.status["phase"] = "Speichern"
-        self.restauriert = speichern(self.v.app, self.ordner, self.name, roh, self.workflow)
-        return self._ergebnis(self.restauriert)
-
-    def _kolorieren_sicher(self):
-        """Pass 2 darf scheitern: dann bleibt es bei der Restaurierung, der Fehler steht im Auftrag und im Terminal."""
-        st = self.status
-        try:
-            self._kolorieren()
-        except (Fehler, FarbFehler, OSError, ValueError) as fehler:
-            st["farbfehler"] = str(fehler)
-        except Exception as fehler:
-            traceback.print_exc()
-            st["farbfehler"] = f"{type(fehler).__name__}: {fehler}"
-        if st["farbfehler"]:
-            self.notizen.append(f"Kolorierung fehlgeschlagen: {st['farbfehler']}")
+        return self._ergebnis(speichern(self.v.app, self.ordner, self.name, roh, self.workflow))
 
     def _kolorieren(self):
-        """Pass 2: die restaurierte Fassung kolorieren, Luma-Lock, als …_koloriert.png speichern."""
-        app, st, k, w = self.v.app, self.status, self.v.farbe, self.farb_wf or self.workflow
+        """Das gezeigte Foto kolorieren – Original oder verbesserte Fassung –, Luma-Lock, als …_koloriert.png."""
+        app, st, k, w = self.v.app, self.status, self.v.farbe, self.workflow
         ziele = w["farbe"]
+        quelle = os.path.join(app.archiv.pfad, self.ordner, self.name)
         with tempfile.TemporaryDirectory(prefix="fotolese_") as tmp:
-            restored = os.path.join(tmp, "restored.png")  # feste Namen: kein „%“ o. Ä. in den ffmpeg-Argumenten
-            shutil.copyfile(os.path.join(app.archiv.pfad, self.ordner, self.restauriert), restored)
-            if self.farbe == "auto":
-                st["phase"] = "Kolorierung: prüft Farbe"
-                streuung = k.streuung(restored)
-                self.notizen.append(f"Farbstreuung {streuung:.1f} (Schwelle {k.schwelle:g})")
-                if streuung >= k.schwelle:
-                    st["farbinfo"] = f"Schon farbig (Streuung {streuung:.1f}) – keine Kolorierung."
-                    return
-            st["phase"] = "Kolorierung: Hochladen"
-            with open(restored, "rb") as f:
-                bild = self.v.comfy.hochladen(f"{self.id}_restored.png", f.read(), "image/png")
+            eingang = os.path.join(tmp, "eingang.png")  # feste Namen: kein „%“ o. Ä. in den ffmpeg-Argumenten
+            with Image.open(quelle) as im:  # aufrecht, wie ComfyUI das Foto bekommt – für den Luma-Lock
+                ImageOps.exif_transpose(im).convert("RGB").save(eingang, "PNG")
+            daten, typ, endung = _hochlade_bild(quelle)
+            bild = self.v.comfy.hochladen(f"fotolese_{secrets.token_hex(8)}{endung}", daten, typ)
             wf = copy.deepcopy(w["daten"])
             wf[w["eingang"]]["inputs"]["image"] = bild
             for nid, schluessel in ziele["prompt"]:
@@ -413,19 +387,19 @@ class Auftrag(threading.Thread):
             farbig = roh
             if k.luma:
                 st["phase"] = "Kolorierung: Farbe übertragen"
-                roh_pfad, fertig = os.path.join(tmp, "colorized_raw.png"), os.path.join(tmp, "colorized.png")
+                roh_pfad, fertig = os.path.join(tmp, "koloriert_roh.png"), os.path.join(tmp, "koloriert.png")
                 with open(roh_pfad, "wb") as f:
                     f.write(roh)
-                k.luma_lock(restored, roh_pfad, fertig)
+                k.luma_lock(eingang, roh_pfad, fertig)
                 with open(fertig, "rb") as f:
                     farbig = f.read()
-        stamm = f"{os.path.splitext(os.path.basename(self.restauriert))[0]}_{KOLORIERT}"
-        notiz = {"pass": "colorize", "seed": list(seeds.values()), "restauriert": anzeige(self.restauriert)}
+        st["phase"] = "Speichern"
+        stamm = f"{os.path.splitext(os.path.basename(self.name))[0]}_{KOLORIERT}"
+        notiz = {"pass": "colorize", "seed": list(seeds.values()), "eingang": anzeige(self.name)}
         neu = speichern(app, self.ordner, self.name, farbig, w, stamm=stamm, notiz=notiz, text_von=roh)
-        st["farbe"] = self._ergebnis(neu)
         if k.roh_behalten:
             speichern(app, self.ordner, self.name, roh, w, stamm=f"{stamm}_roh", notiz=notiz)
-        self.notizen.append(f"koloriert als {anzeige(neu)}")
+        return self._ergebnis(neu)
 
 
 class Verbesserer:
@@ -435,7 +409,7 @@ class Verbesserer:
         self.workflows = Workflows(workflow_ordner)
         self.farbe = farbe if farbe and farbe.bereit else None  # Kolorierung; None ohne ffmpeg
         self.vorwahl = vorwahl  # VERBESSERN_WORKFLOW: in der Lupe vorgewählt („“ = zuletzt gewählter)
-        self.farb_workflow = farb_workflow  # FARBE_WORKFLOW: Workflow für Pass 2 („“ = derselbe wie Pass 1)
+        self.farb_workflow = farb_workflow  # FARBE_WORKFLOW: Workflow fürs Kolorieren („“ = der in der Lupe gewählte)
         self.auftraege = OrderedDict()
         self._lock = threading.Lock()
 
@@ -446,13 +420,14 @@ class Verbesserer:
         return next((w for w in self.workflows.brauchbar() if w["datei"] == self.farb_workflow and w["farbe"]), None)
 
     def fuer_seite(self):
-        """Für die Oberfläche: [{"datei", "name", "farbe"}] der brauchbaren Workflows (farbe: kann kolorieren –
-        mit eigenem Kolorier-Workflow jeder, sonst nur einer mit Prompt-Text)."""
-        fw = self.farb_wf()
-        return [{"datei": w["datei"], "name": w["name"], "farbe": bool(self.farbe and (fw or w)["farbe"])}
+        """Für die Oberfläche: [{"datei", "name", "farbe"}] der brauchbaren Workflows (farbe: kann selbst kolorieren,
+        hat also einen Prompt-Text – zählt, wenn kein eigener Kolorier-Workflow eingestellt ist)."""
+        return [{"datei": w["datei"], "name": w["name"], "farbe": bool(self.farbe and w["farbe"])}
                 for w in self.workflows.brauchbar()]
 
-    def starten(self, pfad, datei, kolorieren=None, hinweise=None):
+    def starten(self, pfad, datei, art="verbessern", hinweise=None):
+        """Auftrag für ein Foto: art „verbessern“ mit dem gewählten Workflow, „kolorieren“ mit FARBE_WORKFLOW oder
+        dem gewählten, wenn er einen Prompt-Text hat."""
         if umzug_laeuft(self.app):
             return 409, {"fehler": "Gerade werden Ordner umsortiert – bitte einen Moment warten."}
         o, _, uid = str(pfad or "").partition("/")
@@ -460,24 +435,31 @@ class Verbesserer:
         if not (ORDNER_MUSTER.fullmatch(o) and o in self.app.archiv.ordner() and uid and url_id(name) == uid
                 and self.app.archiv.datei(o, name)):
             return 404, {"fehler": "Bild nicht gefunden. Seite neu laden."}
+        if art not in ("verbessern", "kolorieren"):
+            return 400, {"fehler": "Unbekannter Auftrag."}
         w = next((w for w in self.workflows.brauchbar() if w["datei"] == datei), None)
-        if not w:
+        hinweise = str(hinweise or "").strip() if art == "kolorieren" else ""
+        if art == "kolorieren":
+            if not self.farbe:
+                return 400, {"fehler": "Kolorieren geht nicht – ffmpeg fehlt."}
+            fw = self.farb_wf()
+            if not fw and not (w and w["farbe"]):
+                return 400, {"fehler": "Kolorieren geht nicht – " + (f"„{w['name']}“: {OHNE_PROMPT}" if w else
+                                                                    "kein Workflow mit Prompt-Text gewählt.")}
+            w = fw or w
+            if len(hinweise) > MAX_HINWEIS:
+                return 400, {"fehler": f"Farbhinweise höchstens {MAX_HINWEIS} Zeichen."}
+        elif not w:
             return 404, {"fehler": "Workflow nicht gefunden – liegt die Datei noch im Ordner workflows? Seite neu laden."}
-        modus = kolorieren if kolorieren in MODI else (self.farbe.standard if self.farbe else "off")
-        hinweise = str(hinweise or "").strip()
-        fw = self.farb_wf()
-        if modus != "off" and not (self.farbe and (fw or w)["farbe"]):
-            return 400, {"fehler": "Kolorierung geht hier nicht – " + ("ffmpeg fehlt." if not self.farbe else
-                                                                       f"„{w['name']}“: {OHNE_PROMPT}")}
-        if len(hinweise) > MAX_HINWEIS:
-            return 400, {"fehler": f"Farbhinweise höchstens {MAX_HINWEIS} Zeichen."}
-        auftrag = Auftrag(self, o, name, w, modus, hinweise, farb_wf=fw)
+        auftrag = Auftrag(self, o, name, w, art, hinweise)
         with self._lock:
             self.auftraege[auftrag.id] = auftrag
             while len(self.auftraege) > MAX_AUFTRAEGE:
                 self.auftraege.popitem(last=False)
         auftrag.start()
-        return 200, {"auftrag": auftrag.id, "meldung": f"Verbessern mit „{w['name']}“ gestartet – das dauert etwas."}
+        was = "Kolorieren" if art == "kolorieren" else "Verbessern"
+        return 200, {"auftrag": auftrag.id, "workflow": w["name"],
+                     "meldung": f"{was} mit „{w['name']}“ gestartet – das dauert etwas."}
 
     def stand(self, ids):
         with self._lock:
