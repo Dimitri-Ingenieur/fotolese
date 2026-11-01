@@ -91,6 +91,8 @@ Filter im Suchfeld, Begriffe mit Komma trennen:
   Juli 2023 | 2023-07 | 0012 (Ordner) | Person 7 | ohne Jahr | Jahr korrigiert | Teil eines Dateinamens
   Album Urlaub (oder nur Urlaub) | ohne Album   -> mehrere Alben: Fotos aus einem davon
   Alle Fotos (Knopf neben „Filtern“)            -> das ganze Archiv nach Datum, z. B. zum Einordnen
+  Ohne Album (Knopf daneben)                    -> nur Fotos, die noch in keinem Album sind; eingeordnete werden
+                                                   blass, nach dem Neuladen bleiben die übrigen
 
 Aufruf (Conda-Umgebung von fotosort.py):
   python -m pip install opencv-python-headless   # nur für die Gesichtserkennung nötig

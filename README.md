@@ -26,7 +26,7 @@ auch selbst aufrufen – dann müssen Sie fotosort.py nicht von Hand starten.
 - Index mit Datum, Ort und Gesichtern; Filter wie `2023, Leipzig, Anna`
 - Gesichter benennen; lernt aus Ihren Korrekturen (`bestof.conf`)
 - Alben: jedes Foto in beliebig vielen Alben, sichtbar unter dem Foto, im Filter nutzbar ([mehr](#alben))
-- „Alle Fotos“ und Jahr per Klick: das Archiv durchgehen, Alben und Jahre schnell zuordnen
+- „Alle Fotos“, „Ohne Album“ und Jahr per Klick: das Archiv durchgehen, Alben und Jahre schnell zuordnen
   ([mehr](#alle-fotos-und-jahr-per-klick))
 - Papierkorb: ein Klick schiebt ein Foto nach `Sortiert/Musor`, mit „Rückgängig“; endgültig gelöscht wird
   nur im Dateimanager ([mehr](#papierkorb))
@@ -128,8 +128,8 @@ stehen seine Alben; ein Klick darauf zeigt alle Fotos des Albums.
    Liste aller Alben zum Ankreuzen; dort lässt sich auch gleich ein neues anlegen.
 
 Filtern: `Album Urlaub 2023` oder nur `Urlaub 2023`; mehrere Alben mit Komma zeigen die Fotos aus
-einem davon, kombiniert mit anderem gilt beides (`Urlaub 2023, Anna`). `ohne Album` zeigt, was noch
-nirgends einsortiert ist. Auf der Seite „Alben“ lassen sich Alben umbenennen und löschen – die Fotos
+einem davon, kombiniert mit anderem gilt beides (`Urlaub 2023, Anna`). `ohne Album` (oder der Knopf
+„Ohne Album“ neben „Filtern“) zeigt, was noch nirgends einsortiert ist. Auf der Seite „Alben“ lassen sich Alben umbenennen und löschen – die Fotos
 bleiben dabei im Archiv. Die Alben stehen im Index (`Sortiert/.bestof-index.sqlite3`), so wie Namen und
 Korrekturen: Wer ihn löscht, verliert sie.
 
@@ -138,6 +138,10 @@ Korrekturen: Wer ihn löscht, verliert sie.
 „Alle Fotos“ neben „Filtern“ zeigt das ganze Archiv nach Datum, 240 Fotos je Seite, Fotos ohne Datum
 am Ende. Darüber steht dieselbe Leiste wie bei jedem Filter: Album wählen und mit ＋ einordnen, so
 lässt sich das Archiv Seite für Seite durchgehen. Nur die Fotos ohne Datum zeigt der Filter `ohne Jahr`.
+
+„Ohne Album“ daneben zeigt nur die Fotos, die noch in keinem Album sind – ebenfalls nach Datum. Wer
+eines einordnet, sieht es sofort blass werden, über den Fotos steht, wie viele hier noch fehlen. Nach
+dem Neuladen bleiben nur die übrigen, so schrumpft die Liste, bis jedes Foto ein Album hat.
 
 **Jahr per Klick:** rechts in der Leiste das Jahr eintippen, z. B. `1994`, dann „→ 1994“ unter den
 Fotos anklicken; mit Umschalt bekommen alle Fotos bis zum zuletzt angeklickten das Jahr. Das geht in

@@ -10,7 +10,7 @@ import numpy as np
 from fotolese.web.konst import KOLORIERT, MONATE, PAPIERKORB, VERBESSERT
 from fotolese.web.konfig import (anzeige, bilder_text, bildmasse, datum_kurz, e, groesse_text,
                                  name_aus_id, ort_text, url_id, zeit_text)
-from fotolese.web.suche import ALLE_FOTOS, suche_ausfuehren
+from fotolese.web.suche import ALLE_FOTOS, OHNE_ALBUM, suche_ausfuehren
 from fotolese.web.alben import alben_liste, alben_von
 from fotolese.web.index import namensliste, personen_namen
 from fotolese.web.lernen import lern_zeile
@@ -270,6 +270,7 @@ select{font:inherit;color:inherit;padding:5px 8px;background:var(--flaeche);bord
 .knopf.amark{font-size:13px;padding:2px 9px}
 .knopf.amark.an,.lupe .knopf.almark.an{border-color:var(--album);color:var(--album)}
 .imalbum .rahmen{outline:3px solid var(--album);outline-offset:-3px}
+.feld.eingeordnet .rahmen img{opacity:.35}
 .albumleiste{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;
   padding:10px 16px;background:var(--umfeld);border-bottom:1px solid var(--linie)}
 .albumleiste.aktiv{border-bottom-color:var(--album)}
@@ -289,7 +290,7 @@ select{font:inherit;color:inherit;padding:5px 8px;background:var(--flaeche);bord
 @media (max-width:560px){
   .titel h1{font-size:48px}.raster{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}
   .bogen{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
-  .suche{flex-basis:100%;max-width:none}
+  .suche{flex-basis:100%;max-width:none;flex-wrap:wrap}.suche input{flex:1 1 100%;width:auto}
   .jahrwerk{margin-left:0}
   .albumleiste{position:static}
 }
@@ -713,7 +714,14 @@ function feldAlben(i){const b=D.bilder[i],f=felder[i],s=f&&f.querySelector('.alb
  else{k.className='link aplus';k.textContent=ids.length?'＋':'＋ Album';k.title='Alben zuordnen';
   k.addEventListener('click',()=>albenOeffnen(i));}
  s.replaceChildren(...albSortiert(ids.filter(id=>id!==aktAlbum)).map(albLink),k);}  // aktives Album zeigt der Knopf
-function albAlleZeichnen(){D.bilder.forEach((_,i)=>feldAlben(i));albLeiste();if(aktiv>=0)albenLupe();if(albenOffen())albenListe();}
+function albAlleZeichnen(){D.bilder.forEach((_,i)=>feldAlben(i));albLeiste();albOhne();if(aktiv>=0)albenLupe();
+ if(albenOffen())albenListe();}
+function albOhne(){const el=document.getElementById('ohnealbum');if(!D.ohne_album||!el)return;  // Filter „Ohne Album“
+ const da=D.bilder.filter(b=>!b.weg),rest=da.filter(b=>!(b.a||[]).length).length;
+ D.bilder.forEach((b,i)=>{if(felder[i])felder[i].classList.toggle('eingeordnet',!!(b.a||[]).length);});
+ el.textContent=rest===da.length?'Album oben wählen, dann ＋ unter den Fotos – eingeordnete werden blass, nach dem Neuladen '+
+  'bleiben nur die übrigen.':(rest?'Noch '+rest+' von '+da.length+' hier ohne Album – nach dem Neuladen bleiben nur sie.':
+  'Alle '+da.length+' hier eingeordnet – neu laden für die nächsten.');}
 function albUebernehmen(j){if(j.alben)ALB.splice(0,ALB.length,...j.alben);
  if(j.a)D.bilder.forEach(b=>{const p=albPfad(b);if(p in j.a)b.a=j.a[p];});
  if(j.neu_laden)setTimeout(()=>location.reload(),1500);
@@ -961,7 +969,9 @@ def kopf(app, aktiv="", inhalt_titel="", suchtext=""):
         suche = (f'<form class="suche" action="/suche" role="search"><input name="q" value="{e(suchtext)}" '
                  f'placeholder="Filter, z. B. 2023, Leipzig, Anna" aria-label="Filter"><button class="knopf">Filtern</button>'
                  f'<a class="knopf" href="/suche?{urlencode({"q": ALLE_FOTOS})}" title="Alle Fotos nach Datum – '
-                 f'zum Einordnen in Alben und Jahre">{ALLE_FOTOS}</a></form>')
+                 f'zum Einordnen in Alben und Jahre">{ALLE_FOTOS}</a>'
+                 f'<a class="knopf" href="/suche?{urlencode({"q": OHNE_ALBUM})}" title="Fotos, die noch in keinem '
+                 f'Album sind – zum Einordnen">{OHNE_ALBUM}</a></form>')
     return (f'<header class="kopf"><a class="archiv" href="/">{e(os.path.basename(app.archiv.pfad))}</a>'
             f'{inhalt_titel}<nav class="navi" aria-label="Bereiche">{links}</nav>{suche}'
             f'<p class="status" data-laeuft="{1 if laeuft else 0}">{e(text)}</p></header>')
@@ -1170,7 +1180,8 @@ def bogen_hilfe(app):
             'Jahr korrigieren: ins Jahresfeld tippen, Enter; leeren = Jahr aus der Datei. Für viele Fotos: oben bei '
             '„Jahr per Klick“ das Jahr eintippen, dann → Jahr unter den Fotos anklicken (Umschalt = Bereich). '
             'Alben: oben ein Album wählen, dann ＋ unter den Fotos (Umschalt = Bereich); ein Album unter einem Foto '
-            'anklicken zeigt alle Fotos darin. „Alle Fotos“ oben zeigt das ganze Archiv nach Datum.</p>')
+            'anklicken zeigt alle Fotos darin. „Alle Fotos“ oben zeigt das ganze Archiv nach Datum, „Ohne Album“ '
+            'die Fotos, die noch in keinem Album sind.</p>')
 
 
 def seiten_nav(seite_nr, seiten, link):
@@ -1254,13 +1265,17 @@ def such_seite(app, text, seite_nr):
     felder, daten = bogen_html(app, eintraege, einordner=False)
     chips = "".join(f'<span class="chip">{e(t)}</span>' for t in erklaerung)
     stand = bilder_text(gesamt) + (f", Seite {seite_nr} von {seiten}" if seiten > 1 else "")
-    titel = f'<div class="titel"><div><p id="info">{stand}</p><p class="ziel" id="ziel"></p></div></div>'
+    ohne_album = "ohne Album" in erklaerung  # Einordnen: Fotos, die ein Album bekommen, werden hier blass
+    titel = (f'<div class="titel"><div><p id="info">{stand}</p><p class="ziel" id="ziel"></p>'
+             + ('<p class="leise" id="ohnealbum"></p>' if ohne_album and eintraege else "") + '</div></div>')
     inhalt = kopf(app, "", titel, text)
     if erklaerung:
         inhalt += f'<div class="filter" aria-label="Erkannter Filter">{chips}</div>'
     if not text.strip():
         inhalt += ('<p class="leer">Geben Sie Begriffe mit Komma getrennt ein, z. B. 2023, Leipzig, Anna – '
                    'oder „Alle Fotos“ für das ganze Archiv.</p>')
+    elif not eintraege and ohne_album and len(erklaerung) == 1:
+        inhalt += '<p class="leer">Jedes Foto ist in mindestens einem Album.</p>'
     elif not eintraege:
         inhalt += '<p class="leer">Keine Fotos passen zu allen Begriffen. Entfernen Sie einen Begriff oder prüfen Sie die Schreibweise.</p>'
     else:
@@ -1274,6 +1289,7 @@ def such_seite(app, text, seite_nr):
           "auswahl": {o: [url_id(m) for m in app.auswahl.markiert(o)] for o in ordner_menge},
           "ziele": {o: {url_id(m): z for m, z in app.auswahl.ziele(o).items()} for o in ordner_menge},
           "alben": alben_liste(app.index) if app.index else None, "suche": text.strip() or None, "treffer": gesamt,
+          "ohne_album": ohne_album,
           "verbessern": app.verbesserer.fuer_seite() if app.verbesserer else [], "kolorieren": farb_daten(app),
           "vorwahl": app.verbesserer.vorwahl if app.verbesserer else ""}
     inhalt += f'<script type="application/json" id="daten">{json_im_html(js)}</script>'

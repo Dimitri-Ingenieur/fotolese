@@ -5,6 +5,7 @@ from fotolese.web.konst import MONAT_NR, MONATE
 from fotolese.web.konfig import km_zwischen, name_aus_id
 
 ALLE_FOTOS = "Alle Fotos"  # Knopf neben „Filtern“: das ganze Archiv nach Datum
+OHNE_ALBUM = "Ohne Album"  # Knopf daneben: Fotos, die noch in keinem Album sind
 
 
 def suche_ausfuehren(app, text):
