@@ -245,7 +245,8 @@ Name kommt aus dem Dateinamen (`Foto_restore_API.json` → „Foto restore“). 
 ist, legt `VERBESSERN_WORKFLOW` fest (leer = der zuletzt gewählte). bestof.py setzt das Foto in den Bild-Eingang (`LoadImage` oder ein anderer Knoten mit dem
 Eingang `image`; bei mehreren den, in dessen Titel „fotolese“ steht), würfelt den Seed jedes Mal neu
 und holt das Bild des Speicher-Knotens (`Save Image`). Ein Workflow im normalen statt im API-Format
-wird beim Start mit Hinweis übersprungen. Mitgeliefert ist „Foto restore“ (siehe
+wird beim Start mit Hinweis übersprungen. Mitgeliefert sind „Foto restore“ (Qwen) und „Foto restore
+flux2“ (Flux 2), beide auch für die Kolorierung (siehe
 [Daten und Modelle von Dritten](#daten-und-modelle-von-dritten)).
 
 ComfyUI auf einem anderen Rechner: `COMFYUI = http://rechner:8188`; `COMFYUI = 0` schaltet die Funktion
@@ -441,7 +442,8 @@ fotolese/                    Projektordner
 │       ├── einstellungen.py Seite „Einstellungen“, Workflows hochladen
 │       └── cli.py           main() und Hilfetext (-h)
 ├── workflows/               ComfyUI-Workflows (API-Format) für „Verbessern“
-│   └── Foto_restore_API.json  Qwen Image 2.1 Restore (AusBoss)
+│   ├── Foto_restore_API.json  Qwen Image 2.1 Restore (AusBoss)
+│   └── Foto_restore_flux2.json  Restaurieren mit FLUX.2 [dev]
 ├── environment.yml          Conda-Umgebung (CPU)
 ├── environment-gpu.yml      Conda-Umgebung mit GPU (NVIDIA, Apple Silicon)
 ├── requirements.txt         Pakete für pip (CPU)
@@ -485,6 +487,11 @@ Der mitgelieferte Workflow `workflows/Foto_restore_API.json` („Qwen Image 2.1 
 [ComfyUI-AusBoss](https://github.com/ausboss/ComfyUI-AusBoss) und die Modelle aus der Notiz im Workflow
 (Qwen Image 2.1, Text-Encoder, VAE, Restore- und Turbo-LoRA, zusammen rund 18 GB). Die lädt und
 verwaltet ComfyUI, nicht bestof.py; für die Turbo-LoRA gilt die Qwen Research License.
+
+`workflows/Foto_restore_flux2.json` („Foto restore flux2“) nutzt FLUX.2 [dev] von Black Forest Labs mit
+Text-Encoder, VAE und Turbo-LoRA, wie sie in den Knoten des Workflows stehen, dazu die Knoten
+[rgthree-comfy](https://github.com/rgthree/rgthree-comfy) (Power Lora Loader, Image Comparer). Auch diese
+Modelle verwaltet ComfyUI; es gelten die Lizenzbedingungen ihrer Anbieter.
 
 ## Haftung
 
