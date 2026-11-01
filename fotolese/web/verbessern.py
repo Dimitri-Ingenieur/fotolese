@@ -33,7 +33,7 @@ from PIL import Image, ImageOps, PngImagePlugin
 
 from fotolese.web.konst import KOLORIERT, ORDNER_MUSTER, VERBESSERT
 from fotolese.web.konfig import anzeige, name_aus_id, url_id
-from fotolese.web.kolorieren import MAX_HINWEIS, MODI, FarbFehler, farb_ziele, lora_setzen
+from fotolese.web.kolorieren import MAX_HINWEIS, MODI, OHNE_PROMPT, FarbFehler, farb_ziele, lora_setzen
 from fotolese.web.papierkorb import umzug_laeuft
 
 FRIST = 3600  # so lange wartet ein Auftrag höchstens auf das Ergebnis (Sekunden)
@@ -403,11 +403,11 @@ class Auftrag(threading.Thread):
                 bild = self.v.comfy.hochladen(f"{self.id}_restored.png", f.read(), "image/png")
             wf = copy.deepcopy(w["daten"])
             wf[w["eingang"]]["inputs"]["image"] = bild
-            nid, schluessel = ziele["prompt"]
-            wf[nid]["inputs"][schluessel] = k.prompt_text(self.hinweise)
+            for nid, schluessel in ziele["prompt"]:
+                wf[nid]["inputs"][schluessel] = k.prompt_text(self.hinweise)
             seeds = _variante(wf, f"fotolese/{self.id}_colorize")
-            if ziele["lora"]:
-                lora_setzen(wf[ziele["lora"]], k.restore_lora)
+            for nid in ziele["lora"]:
+                lora_setzen(wf[nid], k.restore_lora)
             self.notizen.append("Seed " + ", ".join(str(s) for s in seeds.values()))
             roh = self._bild_holen(self._warten(wf, "Kolorierung"), wf, knoten=ziele["speichern"])
             farbig = roh
@@ -468,7 +468,7 @@ class Verbesserer:
         fw = self.farb_wf()
         if modus != "off" and not (self.farbe and (fw or w)["farbe"]):
             return 400, {"fehler": "Kolorierung geht hier nicht – " + ("ffmpeg fehlt." if not self.farbe else
-                                                                       f"„{w['name']}“ hat keinen Prompt-Text.")}
+                                                                       f"„{w['name']}“: {OHNE_PROMPT}")}
         if len(hinweise) > MAX_HINWEIS:
             return 400, {"fehler": f"Farbhinweise höchstens {MAX_HINWEIS} Zeichen."}
         auftrag = Auftrag(self, o, name, w, modus, hinweise, farb_wf=fw)

@@ -1,8 +1,10 @@
 """fotolese.web.kolorieren – Kolorierung als zweiter ComfyUI-Lauf nach der Restaurierung, danach Luma-Lock mit ffmpeg.
 
-Pass 2 nimmt denselben Workflow wie die Restaurierung (je Auftrag eine Kopie): Eingang ist die restaurierte Fassung,
-der Prompt die Kolorier-Anweisung (dazu Farbhinweise), der Seed neu, die Restore-LoRA aus oder schwach, der Dateiname
-eigen. Das Ergebnis kommt nur vom Speicher-Knoten. Der Luma-Lock nimmt die Helligkeit (Y) aus der Restaurierung und
+Pass 2 nimmt denselben Workflow wie die Restaurierung oder einen eigenen (FARBE_WORKFLOW; je Auftrag eine Kopie):
+Eingang ist die restaurierte Fassung, der Prompt die Kolorier-Anweisung (dazu Farbhinweise), der Seed neu, die
+Restore-LoRA aus oder schwach, der Dateiname eigen. Das Ergebnis kommt nur vom Speicher-Knoten. Der Prompt ist der
+erste Text-Encoder vor dem Speicher-Knoten (Qwen, CLIP Text Encode für SD/SDXL/Flux …), nie der negative; ein
+Knoten mit „fotolese“ im Titel legt ihn fest. Der Luma-Lock nimmt die Helligkeit (Y) aus der Restaurierung und
 nur die Farbe (Cb/Cr) aus Pass 2: Details, Gesichter und Tonwerte bleiben 1:1, ein Versatz durch das Neuzeichnen
 stört nicht. Bildverarbeitung nur mit ffmpeg/ffprobe; fehlen sie, ist die Kolorierung aus.
 """
@@ -17,44 +19,139 @@ STANDARD_PROMPT = ("Colorize this black-and-white photo with natural, realistic 
                    "exactly; change only the colors.")
 MODI = ("off", "on", "auto")
 MAX_HINWEIS = 300
+OHNE_PROMPT = ("kein Prompt-Text gefunden (Text-Encoder vor dem Speicher-Knoten) oder nicht genau ein Speicher-Knoten. "
+               "Den Prompt-Knoten in ComfyUI im Titel mit „fotolese“ kennzeichnen.")
 
 
 class FarbFehler(Exception):
     """Fehler in Pass 2 oder ffmpeg – die Restaurierung bleibt gültig."""
 
 
-def farb_ziele(knoten):
-    """Wo Pass 2 eingreift: Prompt-Text (Knoten, Eingang), der Speicher-Knoten und ein LoRA-Loader mit Restore-LoRA.
-    Den Prompt-Text findet sie über einen Eingang „prompt“ (Text direkt oder Verbindung zu einem Knoten mit „text“).
-    None, wenn das fehlt oder es nicht genau einen Speicher-Knoten gibt."""
-    prompt = None
+TEXT_FELDER = ("prompt", "text", "t5xxl", "clip_l", "text_g", "text_l")  # Prompt-Eingänge von Text-Encodern
+QUELL_FELDER = ("text", "value", "string", "prompt")  # Text in einem verbundenen Knoten (Text-, String-Knoten)
+
+
+def _titel(k):
+    return str((k.get("_meta") or {}).get("title", "")).lower()
+
+
+def _verbindung(wert, knoten):
+    """Eingang als Verbindung [Knoten, Ausgang] -> ID des Knotens, sonst None."""
+    if isinstance(wert, list) and len(wert) == 2 and str(wert[0]) in knoten:
+        return str(wert[0])
+    return None
+
+
+def _felder(knoten, nid, encoder=True):
+    """Prompt-Felder eines Text-Encoders als [(Knoten, Eingang)]: Text direkt im Eingang oder im verbundenen Knoten.
+    Mit encoder=True leer, wenn der Knoten kein Text-Encoder ist (kein „clip“, nicht „…Encode…“/„…Prompt…“)."""
+    k = knoten[nid]
+    eingaenge, klasse = k["inputs"], str(k["class_type"]).lower()
+    if encoder and not ("clip" in eingaenge or "encode" in klasse or "prompt" in klasse):
+        return []
+    ziele = []
+    for feld in TEXT_FELDER:
+        wert = eingaenge.get(feld)
+        quelle = _verbindung(wert, knoten)
+        if isinstance(wert, str):
+            ziele.append((nid, feld))
+        elif quelle:
+            q = knoten[quelle]["inputs"]
+            schluessel = next((s for s in QUELL_FELDER if isinstance(q.get(s), str)), None)
+            if schluessel:
+                ziele.append((quelle, schluessel))
+    return list(dict.fromkeys(ziele))
+
+
+def _markiert(knoten):
+    """Knoten mit „fotolese“ im Titel, der Text hat – so legt man den Prompt fest, wenn die Suche danebenliegt."""
     for nid, k in knoten.items():
-        p = k["inputs"].get("prompt")
-        if isinstance(p, list) and p and isinstance((knoten.get(str(p[0])) or {}).get("inputs", {}).get("text"), str):
-            prompt = (str(p[0]), "text")
-            break
-        if isinstance(p, str):
-            prompt = (nid, "prompt")
-            break
+        if "fotolese" in _titel(k):
+            felder = [(nid, f) for f in dict.fromkeys(TEXT_FELDER + QUELL_FELDER) if isinstance(k["inputs"].get(f), str)]
+            felder = felder or _felder(knoten, nid, encoder=False)
+            if felder:
+                return felder
+    return []
+
+
+def _prompt_suchen(knoten, start):
+    """Vom Speicher-Knoten rückwärts zum nächsten Text-Encoder, über alle Verbindungen außer negativen (negative,
+    negative_prompt, Titel „negative“): das ist der positive Prompt – bei Qwen (Eingang „prompt“), CLIP Text Encode
+    (SD, SDXL, Flux) und ähnlichen. Notizen und unverbundene Knoten erreicht die Suche gar nicht."""
+    gesehen, schlange = set(), [start]
+    while schlange:
+        nid = schlange.pop(0)
+        if nid in gesehen or "negativ" in _titel(knoten[nid]):
+            continue
+        gesehen.add(nid)
+        ziele = _felder(knoten, nid)
+        if ziele:
+            return ziele
+        for name, wert in knoten[nid]["inputs"].items():
+            quelle = _verbindung(wert, knoten)
+            if quelle and "negativ" not in name.lower():
+                schlange.append(quelle)
+    return []
+
+
+def _restore_lora(k):
+    """LoRA mit „restore“ im Namen: AusBoss-Loader (JSON in „loras“), LoraLoader („lora_name“), Power Lora Loader."""
+    e = k["inputs"]
+    if isinstance(e.get("loras"), str) and "restore" in e["loras"].lower():
+        return True
+    if isinstance(e.get("lora_name"), str) and "restore" in e["lora_name"].lower():
+        return True
+    return any(isinstance(v, dict) and "restore" in str(v.get("lora", "")).lower() for v in e.values())
+
+
+def farb_ziele(knoten):
+    """Wo Pass 2 eingreift: die Prompt-Felder [(Knoten, Eingang)], der Speicher-Knoten und die Knoten mit einer
+    Restore-LoRA. Den Prompt findet sie über einen Knoten mit „fotolese“ im Titel, sonst als ersten Text-Encoder
+    vor dem Speicher-Knoten (nicht den negativen), zur Not über einen Eingang „prompt“.
+    None, wenn kein Prompt zu finden ist oder es nicht genau einen Speicher-Knoten gibt."""
     speicher = [nid for nid, k in knoten.items() if "save" in str(k["class_type"]).lower()]
-    lora = next((nid for nid, k in knoten.items()
-                 if isinstance(k["inputs"].get("loras"), str) and "restore" in k["inputs"]["loras"].lower()), None)
-    if not prompt or len(speicher) != 1:
+    if len(speicher) != 1:
         return None
-    return {"prompt": prompt, "speichern": speicher[0], "lora": lora}
+    prompt = _markiert(knoten) or _prompt_suchen(knoten, speicher[0])
+    if not prompt:  # Rückfall wie früher: irgendein Eingang „prompt“
+        for nid, k in knoten.items():
+            p = k["inputs"].get("prompt")
+            quelle = _verbindung(p, knoten)
+            if quelle and isinstance(knoten[quelle]["inputs"].get("text"), str):
+                prompt = [(quelle, "text")]
+                break
+            if isinstance(p, str):
+                prompt = [(nid, "prompt")]
+                break
+    if not prompt:
+        return None
+    return {"prompt": prompt, "speichern": speicher[0],
+            "lora": [nid for nid, k in knoten.items() if _restore_lora(k)]}
 
 
 def lora_setzen(knoten, staerke):
-    """Restore-LoRA im LoRA-Loader: „loras“ ist ein JSON-Text. Eintrag mit „restore“ im Namen (nicht über die
-    Stelle) bei Stärke 0 abschalten, sonst einschalten mit dieser Stärke. Turbo-LoRA und Steps bleiben."""
-    loras = json.loads(knoten["inputs"]["loras"])
-    for eintrag in loras:
-        if isinstance(eintrag, dict) and "restore" in str(eintrag.get("name", "")).lower():
-            if staerke <= 0:
-                eintrag["enabled"] = False
-            else:
-                eintrag["enabled"], eintrag["strength"] = True, staerke
-    knoten["inputs"]["loras"] = json.dumps(loras, separators=(",", ":"))
+    """Restore-LoRA eines Knotens bei Stärke 0 abschalten, sonst mit dieser Stärke einschalten – im AusBoss-Loader
+    („loras“ ist JSON; Eintrag mit „restore“ im Namen, nicht über die Stelle), im LoraLoader (Stärken) und im Power
+    Lora Loader (Einträge mit „lora“ und „on“). Turbo-LoRA und Steps bleiben."""
+    e = knoten["inputs"]
+    if isinstance(e.get("loras"), str) and "restore" in e["loras"].lower():
+        loras = json.loads(e["loras"])
+        for eintrag in loras:
+            if isinstance(eintrag, dict) and "restore" in str(eintrag.get("name", "")).lower():
+                if staerke <= 0:
+                    eintrag["enabled"] = False
+                else:
+                    eintrag["enabled"], eintrag["strength"] = True, staerke
+        e["loras"] = json.dumps(loras, separators=(",", ":"))
+    if isinstance(e.get("lora_name"), str) and "restore" in e["lora_name"].lower():
+        for s in ("strength_model", "strength_clip"):
+            if isinstance(e.get(s), (int, float)) and not isinstance(e.get(s), bool):
+                e[s] = max(0.0, staerke)
+    for v in e.values():
+        if isinstance(v, dict) and "restore" in str(v.get("lora", "")).lower():
+            v["on"] = staerke > 0
+            if staerke > 0:
+                v["strength"] = staerke
 
 
 class Kolorierung:
