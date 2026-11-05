@@ -1,7 +1,7 @@
 """fotolese.web.suche – Suchbegriffe deuten (Jahr, Monat, Ort, Person, Album, Ordner, Dateiname) und Bilder filtern."""
 import re
 
-from fotolese.web.konst import MONAT_NR, MONATE
+from fotolese.web.konst import MONAT_NR, MONATE, ORDNER_MUSTER
 from fotolese.web.konfig import km_zwischen, name_aus_id
 
 ALLE_FOTOS = "Alle Fotos"  # Knopf neben „Filtern“: das ganze Archiv nach Datum
@@ -66,7 +66,7 @@ def suche_ausfuehren(app, text):
                 monate.add(MONAT_NR[k])
                 erklaerung.append(f"Monat {MONATE[MONAT_NR[k]]}")
             return True
-        if re.fullmatch(r"\d{4}", k):
+        if ORDNER_MUSTER.fullmatch(k):
             if not nur_pruefen:
                 ordner.add(k)
                 erklaerung.append(f"Ordner {k}")
@@ -138,7 +138,7 @@ def suche_ausfuehren(app, text):
         args += sorted(album_ids)
     if "ohne_album" in sonder:
         sql.append("AND pfad NOT IN (SELECT pfad FROM album_bild)")
-    sql.append("ORDER BY sortzeit IS NULL, sortzeit, ordner, datei")
+    sql.append("ORDER BY sortzeit IS NULL, sortzeit, length(ordner), ordner, datei")  # 9999 vor 10000
     zeilen = app.index.q(" ".join(sql), args)
     if orte:
         def nahe(z):

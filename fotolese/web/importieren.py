@@ -47,7 +47,7 @@ def papierkorb_inhalt(app):
 
 
 def duplikate_bereinigen(app, auftrag=None):
-    """Inhaltsgleiche Dateien (SHA-256) in den Ordnern 0001–9999 auf eine reduzieren. Die übrigen kommen in den
+    """Inhaltsgleiche Dateien (SHA-256) in den Ordnern 0001–99999 auf eine reduzieren. Die übrigen kommen in den
     Papierkorb SORTIERT/Musor/Duplikate/<Zeit>/ (mit liste.csv). Behalten wird zuerst die mit Stern (in BestOf),
     dann eine mit Ihren Labels (Namen, Jahr, Alben), dann die ohne Laufindex im Namen, dann die im kleinsten Ordner.
     Geprüft werden nur Dateien gleicher Größe; Prüfsummen merkt sich der Index."""
@@ -168,7 +168,7 @@ def duplikate_bereinigen(app, auftrag=None):
 def _bilder_im_archiv(app, pfade):
     """Absolute Pfade (fotosort-Protokoll, gemeldete Duplikate) -> „0012/<id>“ der angezeigten Bilder, ohne
     Doppelte. Zu einer NEF zählt das JPG/PNG gleichen Namens im selben Ordner; was nicht direkt in einem
-    Ordner 0001–9999 liegt, fällt weg (z. B. ein Duplikat innerhalb der Quelle)."""
+    Ordner 0001–99999 liegt, fällt weg (z. B. ein Duplikat innerhalb der Quelle)."""
     archiv, je_ordner, ergebnis = os.path.abspath(app.archiv.pfad), {}, []
     for p in pfade:
         try:

@@ -17,7 +17,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import numpy as np
 
-from fotolese.web.konst import ORDNER_MUSTER
+from fotolese.web.konst import ORDNER_MUSTER, ORDNER_RE
 from fotolese.web.konfig import bilder_text, name_aus_id, url_id
 from fotolese.web.bild import PLATZHALTER
 from fotolese.web.gesichter import GesichtsSucher, _ueberdeckung, _ueberlappung
@@ -198,11 +198,11 @@ class Handler(BaseHTTPRequestHandler):
         if teile.path == "/favicon.ico":
             return self._senden(204, "image/x-icon", b"")
         if teile.path == "/springen":
-            ziffern = re.sub(r"\D", "", q.get("o", [""])[0])[:4]
+            ziffern = re.sub(r"\D", "", q.get("o", [""])[0])[:5]
             liste = app.archiv.ordner()
             if ziffern and liste:
-                gesucht = f"{int(ziffern):04d}"
-                treffer = next((o for o in liste if o >= gesucht), liste[-1])
+                gesucht = int(ziffern)  # nach Nummer vergleichen: als Text käme 1001 vor 10000
+                treffer = next((o for o in liste if int(o) >= gesucht), liste[-1])
                 return self._weiterleiten(f"/o/{treffer}")
             return self._weiterleiten("/")
         if len(weg) == 2 and weg[0] == "o" and self._ordner_ok(weg[1]):
@@ -375,7 +375,7 @@ def _name_pruefen(db, name, ausser=()):
     name = re.sub(r"\s+", " ", str(name or "")).strip()[:60]
     if "," in name or ";" in name:
         return None, "Namen ohne Komma und Semikolon – sie trennen Begriffe im Filter."
-    if name and re.fullmatch(r"(19|20)\d\d|\d{4}|person\s*\d+", name.casefold()):
+    if name and re.fullmatch(rf"(19|20)\d\d|{ORDNER_RE}|person\s*\d+", name.casefold()):
         return None, "Dieser Name sieht aus wie ein Jahr, ein Ordner oder „Person N“. Bitte anders wählen."
     for pid, vorhanden in db.execute("SELECT id, name FROM person WHERE name IS NOT NULL").fetchall():
         if pid not in ausser and vorhanden.casefold() == name.casefold():

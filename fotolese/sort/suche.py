@@ -3,10 +3,10 @@
 Datei bündelt Pfad, Größe, mtime und die zugeordneten Begleitdateien eines Bildes.
 """
 import os
-import re
 import stat
 from collections import Counter
 
+from fotolese.gemein import ist_ordner, ordner_folge
 from fotolese.sort.konst import BEGLEIT_EXT, BILD_EXT, SKIP_ORDNER
 
 
@@ -18,7 +18,7 @@ class Datei:
         self.res = None
         self.t_sort = 0.0
         self.begleit = []  # [(pfad, groesse, dev)]
-        self.anker = anker  # Bestand: Ordnername "NNNN", neue Bilder: None
+        self.anker = anker  # Bestand: Ordnername ("0042", "12345"), neue Bilder: None
 
     @property
     def ok(self):
@@ -26,14 +26,14 @@ class Datei:
 
 
 def suche_bestand(ausgabe, eingabe_real):
-    """Bilder, die schon in AUSGABE/NNNN liegen. Sie werden nie bewegt, sondern dienen als Anker."""
+    """Bilder, die schon in AUSGABE/0000–99999 liegen. Sie werden nie bewegt, sondern dienen als Anker."""
     bestand = []
     try:
-        eintraege = sorted(os.scandir(ausgabe), key=lambda e: e.name)
+        eintraege = sorted(os.scandir(ausgabe), key=lambda e: ordner_folge(e.name))
     except OSError:
         return bestand
     for e in eintraege:
-        if not (re.fullmatch(r"\d{4}", e.name) and e.is_dir(follow_symlinks=False)):
+        if not (ist_ordner(e.name) and e.is_dir(follow_symlinks=False)):
             continue
         for wurzel, ordner, dateien in os.walk(e.path):
             echt = os.path.realpath(wurzel)

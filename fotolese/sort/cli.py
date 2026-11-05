@@ -1,6 +1,6 @@
 """
 fotosort.py – Fotos rekursiv einsammeln, ähnliche Bilder gruppieren und in
-nummerierte Ordner 0001–9999 verschieben (chronologisch, ein Ordner je Gruppe).
+nummerierte Ordner 0001–99999 verschieben (chronologisch, ein Ordner je Gruppe).
 
 Ähnlich heißt:
   * gleiches Bild in anderer Auflösung, Kompression oder leicht bearbeitet
@@ -11,7 +11,7 @@ nummerierte Ordner 0001–9999 verschieben (chronologisch, ein Ordner je Gruppe)
   * Zu jedem NEF ohne Kamera-JPG wird ein JPG erzeugt (eingebettete Kamera-Vorschau, verlustfrei,
     mit Datum, GPS und Kamera aus dem NEF) – auch für NEF, die schon im Bestand liegen.
 
-Vorhandener Bestand in AUSGABE/0001…9999 bleibt unangetastet:
+Vorhandener Bestand in AUSGABE/0001…99999 bleibt unangetastet (ab 10000 fünfstellig):
   * neue Bilder, die zu einem bestehenden Ordner passen, kommen in diesen Ordner
     (bei mehreren passenden Ordnern in den mit dem ähnlichsten Bild)
   * alle übrigen bekommen neue Ordner ab der höchsten vorhandenen Nummer + 1
@@ -29,7 +29,7 @@ Aufruf (Conda):
   MODUS=analyse python fotosort.py AUSGABE 0004 0005 # welche Werte hätten diese Ordner zusammengebracht?
 
 Nachträglich gruppieren (beide Modi planen nur, verschoben wird nichts):
-  gruppen  gruppiert alle Bilder direkt in AUSGABE/0000–9999 mit den Werten unten, als kämen sie in einem Import.
+  gruppen  gruppiert alle Bilder direkt in AUSGABE/0000–99999 mit den Werten unten, als kämen sie in einem Import.
            Jede Gruppe behält den Ordner mit den meisten ihrer Bilder, Dateien gleichen Namens (JPG+NEF) bleiben
            beisammen, einfarbige und unlesbare bleiben liegen. Der Plan (JSON) kommt nach PLAN, sonst nach
            AUSGABE/fotosort_gruppen_<zeit>.json. Ausführen in bestof.py (Einstellungen → Neu gruppieren): dort
@@ -66,7 +66,7 @@ import time
 from collections import Counter
 from datetime import datetime
 
-from fotolese.gemein import _env
+from fotolese.gemein import _env, ordner_folge
 from fotolese.sort.konst import MAX_ORDNER, VERSION, WINDOWS_FS, rawpy
 from fotolese.sort.bericht import dauer, gb, info, json_zeile, zahl
 from fotolese.sort.bild import analysieren
@@ -153,7 +153,7 @@ def main():
         return 0
     bestand = suche_bestand(ausgabe, os.path.realpath(eingabe))
     if bestand:
-        b_ordner = sorted({d.anker for d in bestand})
+        b_ordner = sorted({d.anker for d in bestand}, key=ordner_folge)
         info(f"Bestand:  {zahl(len(bestand))} Bilder in {zahl(len(b_ordner))} Ordnern "
              f"({b_ordner[0]}–{b_ordner[-1]}) – bleiben, wo sie sind")
 

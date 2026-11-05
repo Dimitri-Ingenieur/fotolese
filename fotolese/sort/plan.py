@@ -3,6 +3,7 @@ import os
 import re
 from collections import defaultdict
 
+from fotolese.gemein import ist_ordner, ordner_folge
 from fotolese.sort.konst import WINDOWS_FS
 
 
@@ -34,7 +35,7 @@ def hoechste_nummer(ausgabe):
     hoch = 0
     try:
         for e in os.scandir(ausgabe):
-            if e.is_dir(follow_symlinks=False) and re.fullmatch(r"\d{4}", e.name):
+            if e.is_dir(follow_symlinks=False) and ist_ordner(e.name):
                 hoch = max(hoch, int(e.name))
     except OSError:
         pass
@@ -85,7 +86,7 @@ def plane(gruppen, anker, ausgabe, einzeln, start, fs_typ, nef_jpg=frozenset(), 
         name = eindeutig(stamm + (".JPG" if ext == ".NEF" else ".jpg"), belegt)
         return (nef_jetzt, os.path.join(zielordner, name), max(groesse // 7, 1), None, "jpg")
 
-    for ordner in sorted(set(zuteilung) | set(bestand_nef)):
+    for ordner in sorted(set(zuteilung) | set(bestand_nef), key=ordner_folge):  # nach Nummer, 9999 vor 10000
         g = sorted(zuteilung.get(ordner, []), key=lambda d: (d.t_sort, d.pfad))
         zielordner = os.path.join(ausgabe, ordner)
         try:

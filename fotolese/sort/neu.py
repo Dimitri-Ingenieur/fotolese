@@ -3,7 +3,7 @@
 Beide Modi planen nur, verschoben wird nichts. bestof.py führt den Plan aus und nimmt dabei Sterne, Alben, Jahr,
 Gesichter und verbesserte Fassungen mit (Einstellungen → Neu gruppieren, Ordner zusammenfassen).
 
-Neu-Gruppierung: Die Bilder direkt in den Ordnern 0000–9999 werden mit den eingestellten Werten gruppiert, als
+Neu-Gruppierung: Die Bilder direkt in den Ordnern 0000–99999 werden mit den eingestellten Werten gruppiert, als
 kämen sie alle in einem Import. Dateien gleichen Namensstamms im selben Ordner (IMG_1.JPG + IMG_1.NEF) bleiben
 beisammen. Jede Gruppe behält den Ordner, in dem schon die meisten ihrer Bilder liegen – ein Ordner gehört höchstens
 einer Gruppe, vergeben wird nach Bildzahl, damit möglichst wenig wandert. Übrige Gruppen bekommen neue Nummern ab
@@ -19,7 +19,6 @@ import atexit
 import json
 import math
 import os
-import re
 import stat
 import sys
 from collections import Counter, defaultdict
@@ -27,6 +26,7 @@ from datetime import datetime
 
 import numpy as np
 
+from fotolese.gemein import ist_ordner, ordner_folge
 from fotolese.sort.konst import BILD_EXT, FLACH_STD, MAX_ORDNER, VERSION
 from fotolese.sort.bericht import Fortschritt, info, json_zeile, zahl, JSON_FORTSCHRITT
 from fotolese.sort.bild import analysieren
@@ -42,12 +42,12 @@ BEISPIELE = 30         # so viele Beispiele (Zusammenlegungen, Teilungen) stehen
 
 
 def suche_archiv(ausgabe):
-    """Alle Bilder direkt in AUSGABE/0000–9999 (ohne Unterordner wie „verbessert“ und ohne versteckte Dateien);
+    """Alle Bilder direkt in AUSGABE/0000–99999 (ohne Unterordner wie „verbessert“ und ohne versteckte Dateien);
     anker = Ordnername."""
     bilder = []
     try:
-        ordner = sorted(e.name for e in os.scandir(ausgabe)
-                        if re.fullmatch(r"\d{4}", e.name) and e.is_dir(follow_symlinks=False))
+        ordner = sorted((e.name for e in os.scandir(ausgabe)
+                         if ist_ordner(e.name) and e.is_dir(follow_symlinks=False)), key=ordner_folge)
     except OSError:
         return bilder
     for o in ordner:
@@ -185,10 +185,10 @@ def ordner_zuteilen(bilder, gruppen, einzeln, start):
             continue
         for ordner, k in anzahl.items():
             if ordner != SAMMEL:
-                kandidaten.append((-k, -k / len(g), ordner, gi))
+                kandidaten.append((-k, -k / len(g), ordner_folge(ordner), ordner, gi))
     kandidaten.sort()
     belegt = set()
-    for _, _, ordner, gi in kandidaten:
+    for _, _, _, ordner, gi in kandidaten:
         if ziele[gi] is None and ordner not in belegt:
             ziele[gi] = ordner
             belegt.add(ordner)
@@ -222,7 +222,7 @@ def gruppen_plan(bilder, schwelle, serie_sek, serie_schwelle, einzeln, start):
                          f"{zahl(max(MAX_ORDNER - start + 1, 0))}. Möglich: EINZELN=0000 oder höhere Werte.")
     umzuege, ziel_von, zusammen = [], {}, []
     for gi, g in enumerate(gruppen):
-        quellen = sorted({bilder[i].anker for i in g})
+        quellen = sorted({bilder[i].anker for i in g}, key=ordner_folge)
         for i in g:
             ziel_von[i] = ziele[gi]
             if bilder[i].anker != ziele[gi]:
@@ -233,8 +233,9 @@ def gruppen_plan(bilder, schwelle, serie_sek, serie_schwelle, einzeln, start):
     for i, z in ziel_von.items():
         if bilder[i].anker != SAMMEL:
             nach[bilder[i].anker].add(z)
-    geteilt = [{"ordner": o, "nach": sorted(z)} for o, z in sorted(nach.items()) if len(z) > 1]
-    zusammen.sort(key=lambda z: (-z["bilder"], z["ziel"]))
+    geteilt = [{"ordner": o, "nach": sorted(z, key=ordner_folge)}
+               for o, z in sorted(nach.items(), key=lambda oz: ordner_folge(oz[0])) if len(z) > 1]
+    zusammen.sort(key=lambda z: (-z["bilder"], ordner_folge(z["ziel"])))
     einheiten = [len({_stamm(bilder[i]) for i in g}) for g in gruppen]
     return {
         "parameter": {"SCHWELLE": schwelle, "SERIE_SEK": serie_sek, "SERIE_SCHWELLE": serie_schwelle,
@@ -339,20 +340,21 @@ def _folgen(basis, neu, auswahl, namen):
         je[c][1].add(x)
     eigene = {neu[x] for x in auswahl}
     basis_auswahl = {basis[x] for x in auswahl}
-    mit = sorted({namen[x] for c in eigene for x in je[c][1] if x not in auswahl and basis[x] not in basis_auswahl})
+    mit = sorted({namen[x] for c in eigene for x in je[c][1] if x not in auswahl and basis[x] not in basis_auswahl},
+                 key=ordner_folge)
     zusammen, beispiele = 0, []
     for c, (bs, xs) in je.items():
         if c in eigene or len(bs) < 2:
             continue
         zusammen += len(bs) - 1
-        beispiele.append(sorted({namen[x] for x in xs}))
-    beispiele.sort(key=lambda b: (-len(b), b))
+        beispiele.append(sorted({namen[x] for x in xs}, key=ordner_folge))
+    beispiele.sort(key=lambda b: (-len(b), [ordner_folge(o) for o in b]))
     return {"mit": mit[:20], "n_mit": len(mit), "zusammen": zusammen, "beispiele": beispiele[:5]}
 
 
 def analyse(bilder, auswahl, schwelle, serie_sek, serie_schwelle):
     """Welche Werte hätten die Bilder der Ordner in auswahl automatisch in eine Gruppe gebracht? Siehe Modulhilfe."""
-    auswahl = sorted(set(auswahl))
+    auswahl = sorted(set(auswahl), key=ordner_folge)
     jetzt = {"SCHWELLE": schwelle, "SERIE_SEK": serie_sek, "SERIE_SCHWELLE": serie_schwelle}
     sel = [i for i, d in enumerate(bilder) if d.anker in auswahl]
     teil = [i for i in sel if vergleichbar(bilder[i])]
@@ -418,7 +420,7 @@ def analyse(bilder, auswahl, schwelle, serie_sek, serie_schwelle):
             wert = round(wert, 1)
         else:
             wert = int(round(wert))
-        a, b = sorted((_rel(unter[k]), _rel(unter[l])))
+        a, b = sorted((_rel(unter[k]), _rel(unter[l])), key=lambda r: (ordner_folge(r.partition("/")[0]), r))
         vorschlaege[name] = wert
         rk, rl = unter[k].res, unter[l].res
         mit_zeit = rk[5] and rk[5] == rl[5] and rk[3] is not None and rl[3] is not None  # gleiche Kamera, mit Zeit
@@ -450,7 +452,7 @@ def analyse(bilder, auswahl, schwelle, serie_sek, serie_schwelle):
     basis = _ordner_cluster(bilder, jetzt_uf, knoten, len(namen))
     eigene = {basis[x] for x in auswahl_knoten}
     ergebnis["verbunden_jetzt"] = sorted({namen[x] for x in range(len(namen))
-                                          if basis[x] in eigene and x not in auswahl_knoten})[:20]
+                                          if basis[x] in eigene and x not in auswahl_knoten}, key=ordner_folge)[:20]
     ergebnis["schon_global"] = len({jetzt_uf.finde(i) for i in teil}) == 1
     for v in ergebnis["vorschlaege"]:
         if v["wert"] is None:
@@ -531,8 +533,8 @@ def neu_main(modus, args, schwelle, serie_sek, serie_schwelle, einzeln, jobs, ca
     auswahl = []
     for o in args[1:]:
         name = os.path.basename(o.rstrip("/\\"))
-        if not re.fullmatch(r"\d{4}", name) or name == SAMMEL or not os.path.isdir(os.path.join(ausgabe, name)):
-            sys.exit(f"Fehler: {o} ist kein Ordner 0001–9999 in {ausgabe}.")
+        if not ist_ordner(name) or name == SAMMEL or not os.path.isdir(os.path.join(ausgabe, name)):
+            sys.exit(f"Fehler: {o} ist kein Ordner 0001–99999 in {ausgabe}.")
         auswahl.append(name)
     info(f"fotosort {VERSION} · Modus {modus} · Archiv {ausgabe}")
     bilder = suche_archiv(ausgabe)
@@ -554,7 +556,7 @@ def neu_main(modus, args, schwelle, serie_sek, serie_schwelle, einzeln, jobs, ca
             json_zeile({"analyse": erg})
             return 0
         hoch = max([int(d.anker) for d in bilder] + [int(e.name) for e in os.scandir(ausgabe)
-                                                     if re.fullmatch(r"\d{4}", e.name) and e.is_dir()] + [0])
+                                                     if ist_ordner(e.name) and e.is_dir()] + [0])
         plan = gruppen_plan(bilder, schwelle, serie_sek, serie_schwelle, einzeln, hoch + 1)
     except KeyboardInterrupt:
         sys.exit("\nAbgebrochen.")
