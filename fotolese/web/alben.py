@@ -25,11 +25,11 @@ def alben_liste(index):
 def alben_von(index, pfade):
     """{pfad: [Album-IDs]} – jeder Pfad kommt vor, ohne Album mit leerer Liste."""
     ergebnis = {p: [] for p in pfade}
-    ordner = sorted({p[:4] for p in pfade})
+    ordner = sorted({p.split("/", 1)[0] for p in pfade})  # vier- oder fünfstellig
     for k in range(0, len(ordner), 500):
         teil = ordner[k:k + 500]
-        for pfad, album in index.q(f"SELECT pfad, album FROM album_bild WHERE substr(pfad, 1, 4) IN "
-                                   f"({','.join('?' * len(teil))}) ORDER BY album", teil):
+        for pfad, album in index.q(f"SELECT pfad, album FROM album_bild WHERE substr(pfad, 1, instr(pfad, '/') - 1) "
+                                   f"IN ({','.join('?' * len(teil))}) ORDER BY album", teil):
             if pfad in ergebnis:
                 ergebnis[pfad].append(album)
     return ergebnis

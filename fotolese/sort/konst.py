@@ -4,6 +4,8 @@ import errno
 from PIL import Image
 from datetime import datetime
 
+from fotolese.gemein import MAX_ORDNER  # höchste Ordnernummer (99999), gilt auch für bestof
+
 try:
     import rawpy
 except ImportError:
@@ -16,7 +18,6 @@ BEGLEIT_EXT = {".xmp", ".pp3", ".aae"}
 SKIP_ORDNER = {"@eaDir", "$RECYCLE.BIN", "System Volume Information", "lost+found"}
 WINDOWS_FS = {"vfat", "msdos", "exfat", "ntfs", "ntfs3", "fuseblk", "cifs", "smb3"}
 KRITISCH = {errno.ENOSPC, errno.EIO, errno.EROFS, errno.ENODEV, errno.ENXIO, errno.EDQUOT}
-MAX_ORDNER = 9999
 FLACH_STD = 1.0          # praktisch einfarbige Bilder nicht per Hash verknüpfen
 DRAFT = (256, 256)       # JPEG nur in 1/2, 1/4 oder 1/8 Auflösung dekodieren
 SYNC_BYTES = 1 << 30     # nach spätestens 1 GiB Kopie: sync, dann Quellen löschen

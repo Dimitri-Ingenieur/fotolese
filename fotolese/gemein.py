@@ -1,12 +1,28 @@
 """fotolese.gemein – Helfer, die fotosort (sort) und bestof (web) gemeinsam nutzen.
 
 Vereinheitlicht den zuvor in beiden Skripten doppelt vorhandenen Code:
-Einstellungen (_env), SHA-256 und das Datum aus dem Dateinamen.
+Einstellungen (_env), SHA-256, das Datum aus dem Dateinamen und die Namen der Ordner im Archiv.
 """
 import hashlib
 import os
 import re
 import sys
+
+# Ordner im Archiv: 0000 (Sammelordner), 0001–9999 vierstellig, ab 10000 fünfstellig bis 99999 – so, wie
+# f"{n:04d}" sie schreibt. Jede Nummer hat genau einen Namen: 01234 ist kein Ordner (sonst gäbe es 1234 doppelt).
+MAX_ORDNER = 99999
+ORDNER_RE = r"(?:\d{4}|[1-9]\d{4})"
+ORDNER_MUSTER = re.compile(ORDNER_RE)
+
+
+def ist_ordner(name):
+    """Name eines Ordners 0000–99999?"""
+    return ORDNER_MUSTER.fullmatch(name) is not None
+
+
+def ordner_folge(name):
+    """Sortierschlüssel nach Nummer: 9999 vor 10000 – als Text stünde 10000 vor 2000. Verträgt jeden Namen."""
+    return len(name), name
 
 
 def _env(name, standard, typ=str, konfig=None, quelle=None):

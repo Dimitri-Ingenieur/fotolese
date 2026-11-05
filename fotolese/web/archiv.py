@@ -1,4 +1,4 @@
-"""fotolese.web.archiv – Zugriff auf den Sortiert-Ordner: Ordner 0001–9999, Bilder, NEF-Begleiter.
+"""fotolese.web.archiv – Zugriff auf den Sortiert-Ordner: Ordner 0001–99999, Bilder, NEF-Begleiter.
 
 Verbesserte Fassungen (ComfyUI) liegen im Unterordner „verbessert“ eines Ordners. Sie zählen als eigene Bilder
 mit dem Namen „verbessert/<Datei>“ und stehen in der Liste direkt hinter ihrem Original.
@@ -7,6 +7,7 @@ import os
 import threading
 import time
 
+from fotolese.gemein import ordner_folge
 from fotolese.web.konst import BILD_EXT, KOLORIERT, ORDNER_MUSTER, VERBESSERT
 from fotolese.web.konfig import natuerlich
 
@@ -89,8 +90,8 @@ class Archiv:
             if not frisch and time.time() - stand < 5:
                 return liste
         try:
-            liste = sorted(d.name for d in os.scandir(self.pfad)
-                           if ORDNER_MUSTER.fullmatch(d.name) and d.is_dir())
+            liste = sorted((d.name for d in os.scandir(self.pfad)
+                            if ORDNER_MUSTER.fullmatch(d.name) and d.is_dir()), key=ordner_folge)
         except OSError:
             liste = []
         with self._lock:

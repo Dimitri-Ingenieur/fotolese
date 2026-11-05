@@ -13,7 +13,8 @@ Sie es im Browser durch und wählen die besten aus. bestof.py kann fotosort.py �
 auch selbst aufrufen – dann müssen Sie fotosort.py nicht von Hand starten.
 
 **fotosort.py** – Kommandozeile (Paket `fotolese/sort/`)
-- legt ähnliche Fotos und Serienbilder in nummerierte Ordner `0001`–`9999`
+- legt ähnliche Fotos und Serienbilder in nummerierte Ordner `0001`–`99999` (bis `9999` vierstellig, ab
+  `10000` fünfstellig – bestehende Ordner behalten ihren Namen)
 - ergänzt passende bestehende Ordner; gleiche Dateinamen bekommen einen Laufindex (`IMG_0001_1.JPG`)
 - erzeugt zu jeder NEF-Datei ein JPG
 - übernimmt inhaltsgleiche Dateien (SHA-256) nur einmal
@@ -132,7 +133,7 @@ Kleinschreibung spielt keine Rolle.
 | `Anna`, `Person 7` | Fotos mit dieser Person (Name oder Nummer einer unbenannten Gruppe) |
 | `Urlaub 2023` oder `Album Urlaub 2023` | Fotos in diesem Album |
 | `ohne Album` | Fotos, die in keinem Album sind |
-| `0012` | Ordner 0012 |
+| `0012`, `12345` | Ordner 0012 bzw. 12345 |
 | `Alle Fotos` | das ganze Archiv |
 | anderer Text, z. B. `IMG_45` | Fotos, deren Dateiname diesen Text enthält |
 

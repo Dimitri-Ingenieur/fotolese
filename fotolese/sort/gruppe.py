@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 
-from fotolese.gemein import sha256
+from fotolese.gemein import ordner_folge, sha256
 from fotolese.sort.konst import FLACH_STD
 from fotolese.sort.bericht import Fortschritt
 
@@ -156,10 +156,10 @@ def finde_anker(gruppen, bestand, schwelle, serie_sek, serie_schwelle):
     neu = [(gi, d) for gi, g in enumerate(gruppen) for d in g if d.res[2] >= FLACH_STD]
     if not alt or not neu:
         return anker
-    bestes = {}  # Position in neu -> (abstand, ordner, pfad)
+    bestes = {}  # Position in neu -> (abstand, Ordnernummer, pfad, ordner) – Gleichstand: kleinere Nummer
 
     def merken(pos, abstand, d_alt):
-        kandidat = (abstand, d_alt.anker, d_alt.pfad)
+        kandidat = (abstand, ordner_folge(d_alt.anker), d_alt.pfad, d_alt.anker)
         if pos not in bestes or kandidat < bestes[pos]:
             bestes[pos] = kandidat
 
@@ -201,5 +201,5 @@ def finde_anker(gruppen, bestand, schwelle, serie_sek, serie_schwelle):
         if gi not in je_gruppe or kandidat < je_gruppe[gi]:
             je_gruppe[gi] = kandidat
     for gi, kandidat in je_gruppe.items():
-        anker[gi] = kandidat[1]
+        anker[gi] = kandidat[3]
     return anker

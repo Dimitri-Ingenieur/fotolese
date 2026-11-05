@@ -7,7 +7,7 @@ from urllib.parse import quote, urlencode
 
 import numpy as np
 
-from fotolese.web.konst import KOLORIERT, MONATE, PAPIERKORB, VERBESSERT
+from fotolese.web.konst import KOLORIERT, MAX_ORDNER, MONATE, PAPIERKORB, VERBESSERT
 from fotolese.web.konfig import (anzeige, bilder_text, bildmasse, datum_kurz, e, groesse_text,
                                  name_aus_id, ort_text, url_id, zeit_text)
 from fotolese.web.suche import ALLE_FOTOS, OHNE_ALBUM, suche_ausfuehren
@@ -342,7 +342,7 @@ function bilderText(n){return n===1?'1 Bild':zahl(n)+' Bilder';}
 const zk=$('zusammen'),wl=$('wahlleiste'),zd=$('zdialog'),kacheln=[...document.querySelectorAll('.raster .kachel')];
 let wahl=false,letzte=-1,anaId=null,anaTimer=null;const gew=new Set();
 const NAMEN={SCHWELLE:'Bildvergleich',SERIE_SEK:'Serie: Zeitabstand',SERIE_SCHWELLE:'Serie: Abstand'};
-function liste(){return [...gew].sort();}
+function liste(){return [...gew].sort((a,b)=>a-b);}  // nach Nummer: 9999 vor 10000
 function waehlen(an){wahl=an&&!!kacheln.length;document.body.classList.toggle('waehlen',wahl);wl.hidden=!wahl;
  zk.setAttribute('aria-pressed',wahl);if(!wahl){gew.clear();letzte=-1;}zeigen();}
 function zeigen(){kacheln.forEach(k=>k.classList.toggle('markiert',gew.has(k.dataset.o)));const l=liste();
@@ -1258,7 +1258,7 @@ def ordner_zusammen(app, ordner):
 
 VERSCHIEBEN_HTML = """<div class="wahlleiste" id="vsleiste" hidden><span id="vstext"></span>
 <button class="knopf haupt" id="vsneu" type="button" disabled>In neue Gruppe ({naechster})</button>
-<form class="vsin" id="vsform"><input id="vsziel" class="pname" inputmode="numeric" maxlength="4" placeholder="Ordner"
+<form class="vsin" id="vsform"><input id="vsziel" class="pname" inputmode="numeric" maxlength="5" placeholder="Ordner"
  aria-label="Nummer des Zielordners" autocomplete="off"><button class="knopf" id="vsin" disabled>In diesen Ordner</button></form>
 <button class="knopf" id="vsende" type="button">Fertig</button></div>"""
 
@@ -1284,7 +1284,7 @@ def ordner_seite(app, ordner):
                    'die nicht in diese Gruppe gehören, und in eine neue Gruppe oder einen anderen Ordner verschieben">'
                    'Fotos verschieben …</button>')
     hoch = max(int(o) for o in liste)
-    naechster = f"{hoch + 1:04d}" if hoch < 9999 else None
+    naechster = f"{hoch + 1:04d}" if hoch < MAX_ORDNER else None
     ordnerjahr = ('<form class="ordnerjahr" id="ordnerjahr"><input class="jahr" inputmode="numeric" maxlength="4" '
                   'placeholder="Jahr" aria-label="Jahr für alle Bilder dieses Ordners" title="Jahr für alle Bilder dieses '
                   'Ordners setzen. Leer lassen = alle Korrekturen im Ordner entfernen.">'
@@ -1447,7 +1447,7 @@ def alben_seite(app):
     titelbilder = {}
     for album, ordner, datei, mt in app.index.q(
             "SELECT ab.album, b.ordner, b.datei, b.mtime FROM album_bild ab JOIN bild_eff b ON b.pfad = ab.pfad "
-            "ORDER BY b.sortzeit IS NULL, b.sortzeit, b.pfad"):
+            "ORDER BY b.sortzeit IS NULL, b.sortzeit, length(b.ordner), b.pfad"):
         titelbilder.setdefault(album, (ordner, datei, mt))
     ohne = app.index.einer("SELECT COUNT(*) FROM bild WHERE pfad NOT IN (SELECT pfad FROM album_bild)")[0]
     titel = (f'<div class="titel"><h1>Alben</h1><div><p>{len(alben)} {"Album" if len(alben) == 1 else "Alben"}</p>'
@@ -1497,7 +1497,7 @@ def gruppe_pruefen_seite(app, pid):
     zeilen.sort(key=lambda r: float(np.frombuffer(r[1], np.float32) @ mitte) / laenge if r[1] and laenge > 0 else 2.0)
     gesamt, zeilen = len(zeilen), zeilen[:600]
     gesichter = "".join(
-        f'<figure class="gesicht wahl" data-id="{gid}" title="{e(name_aus_id(gp.split("/", 1)[1]))} (Ordner {gp[:4]})">'
+        f'<figure class="gesicht wahl" data-id="{gid}" title="{e(name_aus_id(gp.split("/", 1)[1]))} (Ordner {gp.split("/", 1)[0]})">'
         f'<img loading="lazy" src="/f/{gid}?v={mt}.{int(gx * 1e4)}.{int(gy * 1e4)}.{int(gw * 1e4)}" alt="">'
         f'<span class="haken" aria-hidden="true">✓</span></figure>'
         for gid, _, gp, gx, gy, gw, gh, mt in zeilen)
@@ -1579,12 +1579,12 @@ def uebersicht(app, filt, seite_nr):
     werkzeuge = (f'<div class="filter"><nav class="navi" aria-label="Ordnerfilter">{filterlink("alle", "Alle", len(alle))}'
                  f'{filterlink("ohne", "Ohne Stern", len(alle) - n_mit)}{filterlink("mit", "Mit Stern", n_mit)}</nav>'
                  f'<form class="springen" action="/springen"><input name="o" inputmode="numeric" pattern="[0-9]*" '
-                 f'maxlength="4" placeholder="Ordner" aria-label="Ordnernummer"><button class="knopf">Öffnen</button></form>'
+                 f'maxlength="5" placeholder="Ordner" aria-label="Ordnernummer"><button class="knopf">Öffnen</button></form>'
                  f'<button class="knopf rechts" id="zusammen" type="button" aria-pressed="false" title="Ordner mit '
                  f'ähnlichen Fotos auswählen und zu einem zusammenfassen">Ordner zusammenfassen</button>'
                  f'<button class="knopf" id="neuaufbau" type="button">BestOf neu aufbauen</button></div>')
     if not alle:
-        hauptteil = (f'<p class="leer">Keine Ordner 0001–9999 gefunden in {e(app.archiv.pfad)}. '
+        hauptteil = (f'<p class="leer">Keine Ordner 0001–99999 gefunden in {e(app.archiv.pfad)}. '
                      f'Prüfen Sie den Pfad beim Start.</p>')
     elif not liste:
         hauptteil = '<p class="leer">Jeder Ordner hat ein Bild mit Stern.</p>' if filt == "ohne" else \

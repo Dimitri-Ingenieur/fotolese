@@ -18,7 +18,8 @@ import threading
 import time
 import traceback
 
-from fotolese.web.konst import BILD_EXT, ORDNER_MUSTER, VERBESSERT
+from fotolese.gemein import ordner_folge
+from fotolese.web.konst import BILD_EXT, MAX_ORDNER, ORDNER_MUSTER, VERBESSERT
 from fotolese.web.konfig import bilder_text, name_aus_id, natuerlich, url_id
 from fotolese.web.importieren import fotosort_lauf, gruppen_umgebung
 
@@ -375,7 +376,7 @@ class Umzug(threading.Thread):
         (versteckte Dateien, verwaiste Fassungen) mitkommt. Zwei Runden: erst unter dem eigenen Namen, dann der
         Rest mit Laufindex – Namen, die im Ziel erst durch einen Wegzug frei werden, bleiben so meist erhalten."""
         app, st = self.app, self.status
-        betroffen = sorted(staende)
+        betroffen = sorted(staende, key=ordner_folge)
         zeit = time.strftime("%Y%m%d-%H%M%S")
         for k in range(1000):  # feste Breite: der Name sortiert zeitlich, auch mehrere Umzüge je Sekunde
             stempel = f"{zeit}-{k:03d}"
@@ -489,7 +490,7 @@ class Umzug(threading.Thread):
         neu = self.ziel is None
         if neu:
             hoch = max([int(o) for o in app.archiv.ordner(frisch=True)] + [0])
-            if hoch >= 9999:
+            if hoch >= MAX_ORDNER:
                 raise UmzugFehler("Es ist keine Ordnernummer mehr frei.")
             self.ziel = f"{hoch + 1:04d}"
         self.status["zielordner"] = self.ziel
@@ -543,7 +544,7 @@ class Umzug(threading.Thread):
         if any(o in vorhanden for o in neue):  # inzwischen angelegt (z. B. Import): neue Nummern dahinter
             hoch = max([int(o) for o in vorhanden] + [0])
             abbild = {o: f"{hoch + 1 + k:04d}" for k, o in enumerate(neue)}
-            if neue and hoch + len(neue) > 9999:
+            if neue and hoch + len(neue) > MAX_ORDNER:
                 raise UmzugFehler("Für die neuen Gruppen sind keine Ordnernummern mehr frei.")
         staende, liste, gesehen, fehlt, widerspruch = {}, [], {}, 0, 0
 
@@ -618,7 +619,7 @@ class Umzug(threading.Thread):
         st["phase"] = "Sterne und Ordner"
         vorher = prot.get("sterne_vorher") or {}
         app.auswahl.setzen({o: vorher.get(o, []) for o in betroffen})
-        for o in sorted(betroffen):
+        for o in sorted(betroffen, key=ordner_folge):
             _leer_entfernen(os.path.join(app.archiv.pfad, o))
         prot["rueckgaengig"] = time.strftime("%Y%m%d-%H%M%S")
         _schreiben(pfad, prot)
@@ -716,7 +717,7 @@ def _ordner_pruefen(app, roh, mindest=2):
     if not isinstance(roh, list) or not mindest <= len(roh) <= 500:
         raise UmzugFehler(f"Bitte mindestens {mindest} Ordner wählen.")
     vorhanden = set(app.archiv.ordner(frisch=True))
-    ordner = sorted({str(o) for o in roh})
+    ordner = sorted({str(o) for o in roh}, key=ordner_folge)  # ordner[0] = kleinste Nummer, vorgewähltes Ziel
     for o in ordner:
         if not ORDNER_MUSTER.fullmatch(o) or o not in vorhanden:
             raise UmzugFehler(f"Ordner {o} gibt es nicht. Seite neu laden.")
@@ -826,7 +827,7 @@ def gruppieren_api(app, daten):
                         return 404, {"fehler": f"Ordner {ziel} gibt es nicht."}
                     if all(o == ziel for o, _ in auswahl):
                         return 400, {"fehler": f"Die Fotos liegen schon in Ordner {ziel}."}
-                app.auftrag = Umzug(app, "verschieben", ordner=sorted({o for o, _ in auswahl}),
+                app.auftrag = Umzug(app, "verschieben", ordner=sorted({o for o, _ in auswahl}, key=ordner_folge),
                                     ziel=None if ziel == "neu" else ziel, auswahl=auswahl)
             elif aktion == "zusammenfassen":
                 ordner = _ordner_pruefen(app, daten.get("ordner"))
