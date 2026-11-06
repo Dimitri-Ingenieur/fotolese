@@ -55,7 +55,8 @@ Verbessern (ComfyUI, z. B. auf demselben Rechner, Port 8188):
   Kolorieren (braucht ffmpeg) ist ein eigener Knopf „◐ Kolorieren“ in der Lupe: färbt das gezeigte Foto ein – das
   Original direkt oder eine verbesserte Fassung –, optional mit Farbhinweisen. Ergebnis <Name>_koloriert.png im
   Unterordner verbessert; Helligkeit und Details aus dem Foto (Luma-Lock), nur die Farbe von ComfyUI. Workflow:
-  FARBE_WORKFLOW, sonst der in der Lupe gewählte, wenn er einen Prompt-Text hat.
+  FARBE_WORKFLOW, sonst der in der Lupe gewählte, wenn er einen Prompt-Text hat. Die Farbhinweise gelten auch
+  beim Verbessern: Sie kommen ans Ende des Prompt-Texts des Workflows („Color hints: …“), falls er einen hat.
 Ordner zusammenfassen (Übersicht, Knopf „Ordner zusammenfassen“):
   Ordner anklicken (Umschalt = Bereich), „Zusammenfassen …“: alle Fotos kommen in den Zielordner (vorgewählt die
   kleinste Nummer: 0004, 0005, 0006 -> 0004), samt NEF, Begleitdateien und verbesserten Fassungen; gleiche Namen

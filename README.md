@@ -228,7 +228,11 @@ macht bestof.py wieder nur am eigenen Rechner erreichbar, etwa auf einem Laptop 
 Läuft [ComfyUI](https://github.com/comfyanonymous/ComfyUI) (Standard: auf demselben Rechner, Port 8188),
 hat die Lupe den Knopf **✦ Verbessern**:
 
-1. Foto öffnen, daneben den Workflow wählen (bei mehreren), „✦ Verbessern“ klicken.
+1. Foto öffnen, daneben den Workflow wählen (bei mehreren), „✦ Verbessern“ klicken. Steht etwas im Feld
+   **Farbhinweise** (z. B. „the dress is dark blue“), hängt bestof.py es als „Color hints: …“ an den
+   Prompt-Text des Workflows an – etwa für die Farben, die „Foto restore flux2“ beim Restaurieren
+   zurückholt. Welcher Text als Prompt gilt, steht unter [Kolorieren](#kolorieren); ein Workflow ohne
+   Prompt-Text läuft ohne die Hinweise, das sagt die Meldung.
 2. bestof.py lädt das Foto zu ComfyUI und zeigt oben rechts den Stand („wartet, Platz 2“,
    „läuft · 0:35“). Derweil lässt sich weiterblättern, auch weitere Fotos können warten.
 3. Das Ergebnis landet verlustfrei als PNG in `Sortiert/<Ordner>/verbessert/<Name>_<Workflow>.png`,
@@ -262,8 +266,9 @@ Ergebnisse zusätzlich in `output/fotolese/`; dort darf man aufräumen.
 Kolorieren ist ein eigener Knopf in der Lupe, unabhängig vom Verbessern: **◐ Kolorieren** färbt das
 gerade gezeigte Foto ein. Das kann das Original sein – dann wird es direkt koloriert – oder eine schon
 verbesserte Fassung, etwa nach „Foto restore“. Daneben steht ein Feld für Farbhinweise (z. B. „the dress
-is dark blue“, höchstens 300 Zeichen, <kbd>Enter</kbd> startet). „✦ Verbessern“ dagegen verbessert nur
-und färbt nichts ein.
+is dark blue“, höchstens 300 Zeichen, <kbd>Enter</kbd> startet das Kolorieren). „✦ Verbessern“ dagegen
+setzt keine Kolorier-Anweisung ein: Es lässt den Prompt des Workflows stehen und hängt nur die
+Farbhinweise an, wenn das Feld nicht leer ist.
 
 bestof.py lädt das Foto zu ComfyUI und setzt statt des Prompts die Kolorier-Anweisung ein, würfelt einen
 neuen Seed und schaltet die Restore-LoRA ab (sie hielte das Bild grau). Der Stand zeigt „Kolorieren mit
@@ -294,8 +299,9 @@ in ComfyUI im Titel mit „fotolese“ kennzeichnen. Einstellungen in `bestof.co
 | `COLORIZE_PROMPT` | leer | eigene Kolorier-Anweisung statt der eingebauten |
 | `COLORIZE_KEEP_RAW` | `0` | 1 = Bild von ComfyUI zusätzlich als `…_koloriert_roh.png` behalten |
 
-Das Terminal nennt je Auftrag Workflow, Seed und Ergebnis. Frühere Versionen kannten noch die Wahl
-„+ Kolorierung“ beim Verbessern (`COLORIZE_DEFAULT`, `COLORIZE_MONO_THRESHOLD`); beides gibt es nicht mehr.
+Das Terminal nennt je Auftrag Workflow, Seed, Farbhinweise und Ergebnis. Frühere Versionen kannten noch
+die Wahl „+ Kolorierung“ beim Verbessern (`COLORIZE_DEFAULT`, `COLORIZE_MONO_THRESHOLD`); beides gibt es
+nicht mehr.
 
 ### Ordner zusammenfassen und neu gruppieren
 

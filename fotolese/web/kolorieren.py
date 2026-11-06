@@ -31,6 +31,13 @@ TEXT_FELDER = ("prompt", "text", "t5xxl", "clip_l", "text_g", "text_l")  # Promp
 QUELL_FELDER = ("text", "value", "string", "prompt")  # Text in einem verbundenen Knoten (Text-, String-Knoten)
 
 
+def mit_hinweisen(text, hinweise=""):
+    """Farbhinweise ans Ende eines Prompt-Texts: „… Color hints: the dress is dark blue“; ohne Hinweise unverändert.
+    So beim Kolorieren (an die Kolorier-Anweisung) und beim Verbessern (an den Prompt des Workflows)."""
+    hinweise = str(hinweise or "").strip()
+    return f"{text.rstrip()} Color hints: {hinweise}".lstrip() if hinweise else text
+
+
 def _titel(k):
     return str((k.get("_meta") or {}).get("title", "")).lower()
 
@@ -188,7 +195,7 @@ class Kolorierung:
         return r.stdout
 
     def prompt_text(self, hinweise=""):
-        return self.prompt + (f" Color hints: {hinweise.strip()}" if hinweise and hinweise.strip() else "")
+        return mit_hinweisen(self.prompt, hinweise)
 
     def groesse(self, pfad):
         aus = self._lauf([self.ffprobe, "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height",

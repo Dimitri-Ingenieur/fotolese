@@ -874,10 +874,13 @@ function farbWf(){return FARBE?(FARBE.workflow||(VW.length&&wfAktuell().farbe?wf
 function vPaar(b){return b.paar||(b.ng?[b.g,b.ng]:b.vg?[b.vg,b.g]:null);}  // [vorher, nachher]
 function origVon(g){return g.replace('/g/','/orig/').replace(/[?]v=.*$/,'');}
 function vJob(i){return Object.values(vJobs).find(j=>j.i===i&&j.s.laeuft);}
-function verbLupe(){if(aktiv<0)return;const b=D.bilder[aktiv],job=vJob(aktiv),fw=farbWf();
+function verbLupe(){if(aktiv<0)return;const b=D.bilder[aktiv],job=vJob(aktiv),fw=farbWf(),
+  vp=VW.length&&wfAktuell().prompt;  // vp: beim Verbessern kommen die Farbhinweise in den Prompt des Workflows
  verbKnopf.hidden=!VW.length;wfWahl.hidden=VW.length<2;verbKnopf.disabled=farbKnopf.disabled=!!job;
- farbKnopf.hidden=farbHinweis.hidden=!fw;farbKnopf.title='Dieses Foto kolorieren'+(fw?' mit „'+fw+'“':'')+
+ farbKnopf.hidden=!fw;farbHinweis.hidden=!fw&&!vp;farbKnopf.title='Dieses Foto kolorieren'+(fw?' mit „'+fw+'“':'')+
   ' – Original oder verbesserte Fassung; das Ergebnis kommt in den Unterordner verbessert';
+ farbHinweis.title='Kommt ans Ende des Prompts – '+(fw&&vp?'beim Verbessern und beim Kolorieren':fw?'beim Kolorieren':
+  'beim Verbessern')+', z. B. „the dress is dark blue“; Enter = '+(fw?'Kolorieren':'Verbessern');
  verbKnopf.textContent=job&&job.s.art!=='kolorieren'?'Wird verbessert …':'✦ Verbessern';
  farbKnopf.textContent=job&&job.s.art==='kolorieren'?'Wird koloriert …':'◐ Kolorieren';
  vglKnopf.hidden=!vPaar(b);vglKnopf.setAttribute('aria-pressed',vergleich);vStatus.hidden=!job;
@@ -887,7 +890,7 @@ function verbLupe(){if(aktiv<0)return;const b=D.bilder[aktiv],job=vJob(aktiv),fw
 async function verbessern(art){if(aktiv<0||!VW.length&&art==='verbessern'||vJob(aktiv))return;
  const i=aktiv,b=D.bilder[i],w=VW.length?wfAktuell():null;
  const [ok,j]=await post('/api/verbessern',{pfad:b.ordner+'/'+b.id,workflow:w?w.datei:'',art,
-  farbhinweise:art==='kolorieren'?farbHinweis.value.trim():''});
+  farbhinweise:farbHinweis.hidden?'':farbHinweis.value.trim()});
  if(!ok){meldung(j.fehler||(art==='kolorieren'?'Kolorieren':'Verbessern')+' ließ sich nicht starten.',true);return;}
  vJobs[j.auftrag]={i,t0:Date.now(),s:{laeuft:true,phase:'Hochladen',workflow:j.workflow||(w&&w.name)||'',art}};
  meldung(j.meldung);verbLupe();vAbfragen();}
@@ -927,7 +930,8 @@ flaeche.addEventListener('pointermove',ev=>{if(vergleich&&vZiehen)vSetzen(ev);})
 vRegler.addEventListener('input',()=>{vAnteil=+vRegler.value;vLagen();});
 nachherImg.addEventListener('load',vLagen);lupeImg.addEventListener('load',vLagen);window.addEventListener('resize',vLagen);
 verbKnopf.addEventListener('click',()=>verbessern('verbessern'));farbKnopf.addEventListener('click',()=>verbessern('kolorieren'));
-farbHinweis.addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();verbessern('kolorieren');}});
+farbHinweis.addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();
+ verbessern(farbWf()?'kolorieren':'verbessern');}});
 vglKnopf.addEventListener('click',()=>vergleichAn(!vergleich));
 """
 
@@ -1172,8 +1176,9 @@ LUPE_HTML = ('<div class="lupe" hidden role="dialog" aria-label="Lupe"><div clas
              '<select class="wfwahl" aria-label="Workflow zum Verbessern" hidden></select>'
              '<button class="knopf verb" type="button" hidden title="Dieses Foto mit dem gewählten Workflow verbessern – '
              'das Ergebnis kommt in den Unterordner verbessert, das Foto bleibt">✦ Verbessern</button>'
-             '<input class="farbhinweis" maxlength="300" autocomplete="off" aria-label="Farbhinweise fürs Kolorieren" '
-             'hidden placeholder="Farbhinweise (optional)">'
+             '<input class="farbhinweis" maxlength="300" autocomplete="off" '
+             'aria-label="Farbhinweise für den Prompt beim Verbessern und Kolorieren" hidden '
+             'placeholder="Farbhinweise (optional)">'
              '<button class="knopf farb" type="button" hidden title="Dieses Foto kolorieren – Original oder verbesserte '
              'Fassung; das Ergebnis kommt in den Unterordner verbessert">◐ Kolorieren</button>'
              '<button class="knopf vgl" type="button" aria-pressed="false" hidden title="Vorher/Nachher vergleichen '

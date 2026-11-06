@@ -6,7 +6,8 @@ den Bild-Eingang (LoadImage oder ein anderer Knoten mit dem Text-Eingang „imag
 „fotolese“ im Titel), würfelt die Seeds neu und holt das Bild des Speicher-Knotens ab. Gespeichert wird verlustfrei
 als PNG in SORTIERT/<Ordner>/verbessert/<Name>_<Workflow>.png – mit dem EXIF des Originals (Datum, Ort; die Drehung
 steckt dann schon im Bild) und der Workflow-Beschreibung, die ComfyUI ins PNG schreibt. Von Hand gesetztes Jahr
-und Alben übernimmt die neue Fassung vom Original.
+und Alben übernimmt die neue Fassung vom Original. Stehen Farbhinweise im Feld der Lupe, kommen sie ans Ende des
+Prompt-Texts (derselbe, den das Kolorieren ersetzt); hat der Workflow keinen, bleiben sie unbenutzt.
 
 Kolorieren ist ein eigener Auftrag (kolorieren.py): Er färbt das gezeigte Foto ein – Original oder verbesserte
 Fassung – und legt das Ergebnis nach dem Luma-Lock als <Name>_koloriert.png daneben.
@@ -32,7 +33,7 @@ from PIL import Image, ImageOps, PngImagePlugin
 
 from fotolese.web.konst import KOLORIERT, ORDNER_MUSTER, VERBESSERT
 from fotolese.web.konfig import anzeige, name_aus_id, url_id
-from fotolese.web.kolorieren import MAX_HINWEIS, OHNE_PROMPT, FarbFehler, farb_ziele, lora_setzen
+from fotolese.web.kolorieren import MAX_HINWEIS, OHNE_PROMPT, FarbFehler, farb_ziele, lora_setzen, mit_hinweisen
 from fotolese.web.papierkorb import umzug_laeuft
 
 FRIST = 3600  # so lange wartet ein Auftrag höchstens auf das Ergebnis (Sekunden)
@@ -268,14 +269,15 @@ def speichern(app, ordner, name, roh, workflow, stamm=None, notiz=None, text_von
 
 class Auftrag(threading.Thread):
     """Ein Foto verbessern oder kolorieren: hochladen, in die Warteschlange, warten, abholen, speichern.
-    art „verbessern“: der Workflow, wie er ist. art „kolorieren“: Kolorier-Anweisung statt Prompt, danach Luma-Lock."""
+    art „verbessern“: der Workflow, wie er ist, Farbhinweise hinter dem Prompt. art „kolorieren“: Kolorier-Anweisung
+    (mit Farbhinweisen) statt Prompt, danach Luma-Lock."""
 
     def __init__(self, verbesserer, ordner, name, workflow, art="verbessern", hinweise=""):
         super().__init__(daemon=True)
         self.v, self.ordner, self.name, self.workflow = verbesserer, ordner, name, workflow
-        self.art, self.hinweise = art, hinweise  # Farbhinweise nur beim Kolorieren
+        self.art, self.hinweise = art, hinweise  # Farbhinweise: beim Verbessern nur mit Prompt-Text (workflow["farbe"])
         self.id = secrets.token_urlsafe(9)
-        self.notizen = []  # fürs Terminal: Seed
+        self.notizen = []  # fürs Terminal: Seed, Farbhinweise
         self.status = {"id": self.id, "pfad": f"{ordner}/{url_id(name)}", "workflow": workflow["name"], "art": art,
                        "phase": "Hochladen", "platz": None, "laeuft": True, "fehler": "", "ergebnis": None}
 
@@ -299,13 +301,18 @@ class Auftrag(threading.Thread):
                   + "".join(f" · {n}" for n in self.notizen), flush=True)
 
     def _ausfuehren(self):
-        """Pass 1: das Original mit dem Workflow, wie er ist (nur Bild, Seed und Dateiname gesetzt)."""
+        """Das Foto mit dem Workflow, wie er ist: nur Bild, Seed und Dateiname gesetzt, Farbhinweise ans Ende des
+        Prompt-Texts."""
         app, comfy, w = self.v.app, self.v.comfy, self.workflow
         quelle = os.path.join(app.archiv.pfad, self.ordner, self.name)
         daten, typ, endung = _hochlade_bild(quelle)
         bild = comfy.hochladen(f"fotolese_{secrets.token_hex(8)}{endung}", daten, typ)
         wf = copy.deepcopy(w["daten"])
         wf[w["eingang"]]["inputs"]["image"] = bild
+        if self.hinweise and w["farbe"]:
+            for nid, schluessel in w["farbe"]["prompt"]:
+                wf[nid]["inputs"][schluessel] = mit_hinweisen(wf[nid]["inputs"][schluessel], self.hinweise)
+            self.notizen.append(f"Farbhinweise „{self.hinweise}“")
         _variante(wf, f"fotolese/{secrets.token_hex(6)}")
         return self._abholen(self._warten(wf), wf)
 
@@ -383,6 +390,8 @@ class Auftrag(threading.Thread):
             for nid in ziele["lora"]:
                 lora_setzen(wf[nid], k.restore_lora)
             self.notizen.append("Seed " + ", ".join(str(s) for s in seeds.values()))
+            if self.hinweise:
+                self.notizen.append(f"Farbhinweise „{self.hinweise}“")
             roh = self._bild_holen(self._warten(wf, "Kolorierung"), wf, knoten=ziele["speichern"])
             farbig = roh
             if k.luma:
@@ -420,14 +429,16 @@ class Verbesserer:
         return next((w for w in self.workflows.brauchbar() if w["datei"] == self.farb_workflow and w["farbe"]), None)
 
     def fuer_seite(self):
-        """Für die Oberfläche: [{"datei", "name", "farbe"}] der brauchbaren Workflows (farbe: kann selbst kolorieren,
-        hat also einen Prompt-Text – zählt, wenn kein eigener Kolorier-Workflow eingestellt ist)."""
-        return [{"datei": w["datei"], "name": w["name"], "farbe": bool(self.farbe and w["farbe"])}
-                for w in self.workflows.brauchbar()]
+        """Für die Oberfläche: [{"datei", "name", "prompt", "farbe"}] der brauchbaren Workflows (prompt: hat einen
+        Prompt-Text, an den beim Verbessern die Farbhinweise kommen; farbe: kann selbst kolorieren – zählt, wenn kein
+        eigener Kolorier-Workflow eingestellt ist)."""
+        return [{"datei": w["datei"], "name": w["name"], "prompt": bool(w["farbe"]),
+                 "farbe": bool(self.farbe and w["farbe"])} for w in self.workflows.brauchbar()]
 
     def starten(self, pfad, datei, art="verbessern", hinweise=None):
         """Auftrag für ein Foto: art „verbessern“ mit dem gewählten Workflow, „kolorieren“ mit FARBE_WORKFLOW oder
-        dem gewählten, wenn er einen Prompt-Text hat."""
+        dem gewählten, wenn er einen Prompt-Text hat. Die Farbhinweise kommen in beiden Fällen in den Prompt –
+        beim Verbessern nur, wenn der Workflow einen Prompt-Text hat (sonst sagt das die Meldung)."""
         if umzug_laeuft(self.app):
             return 409, {"fehler": "Gerade werden Ordner umsortiert – bitte einen Moment warten."}
         o, _, uid = str(pfad or "").partition("/")
@@ -438,7 +449,7 @@ class Verbesserer:
         if art not in ("verbessern", "kolorieren"):
             return 400, {"fehler": "Unbekannter Auftrag."}
         w = next((w for w in self.workflows.brauchbar() if w["datei"] == datei), None)
-        hinweise = str(hinweise or "").strip() if art == "kolorieren" else ""
+        hinweise = str(hinweise or "").strip()
         if art == "kolorieren":
             if not self.farbe:
                 return 400, {"fehler": "Kolorieren geht nicht – ffmpeg fehlt."}
@@ -447,19 +458,24 @@ class Verbesserer:
                 return 400, {"fehler": "Kolorieren geht nicht – " + (f"„{w['name']}“: {OHNE_PROMPT}" if w else
                                                                     "kein Workflow mit Prompt-Text gewählt.")}
             w = fw or w
-            if len(hinweise) > MAX_HINWEIS:
-                return 400, {"fehler": f"Farbhinweise höchstens {MAX_HINWEIS} Zeichen."}
         elif not w:
             return 404, {"fehler": "Workflow nicht gefunden – liegt die Datei noch im Ordner workflows? Seite neu laden."}
+        if len(hinweise) > MAX_HINWEIS:
+            return 400, {"fehler": f"Farbhinweise höchstens {MAX_HINWEIS} Zeichen."}
+        was, mit, nachsatz = "Kolorieren" if art == "kolorieren" else "Verbessern", f"„{w['name']}“", ""
+        if art == "verbessern" and hinweise:
+            if w["farbe"]:
+                mit += " und den Farbhinweisen"
+            else:  # kein Prompt-Text, an den sie kommen könnten
+                hinweise, nachsatz = "", " Die Farbhinweise bleiben unbenutzt – der Workflow hat keinen Prompt-Text."
         auftrag = Auftrag(self, o, name, w, art, hinweise)
         with self._lock:
             self.auftraege[auftrag.id] = auftrag
             while len(self.auftraege) > MAX_AUFTRAEGE:
                 self.auftraege.popitem(last=False)
         auftrag.start()
-        was = "Kolorieren" if art == "kolorieren" else "Verbessern"
         return 200, {"auftrag": auftrag.id, "workflow": w["name"],
-                     "meldung": f"{was} mit „{w['name']}“ gestartet – das dauert etwas."}
+                     "meldung": f"{was} mit {mit} gestartet – das dauert etwas.{nachsatz}"}
 
     def stand(self, ids):
         with self._lock:
