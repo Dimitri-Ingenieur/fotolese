@@ -304,7 +304,7 @@ def letzter_umzug(app):
 
 def _entfernt_text(prot):
     """Welche Ordner danach leer waren und verschwunden sind (nur leere Ordner, nie Fotos)."""
-    namen = sorted(prot["entfernt"])
+    namen = sorted(prot["entfernt"], key=ordner_folge)  # nach Nummer: 9999 vor 10000
     if not namen:
         return ""
     if len(namen) == 1:
