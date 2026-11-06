@@ -133,6 +133,7 @@ Kleinschreibung spielt keine Rolle.
 | `Leipzig` | Fotos höchstens `NAEHE_KM` (Standard 15 km) von Leipzig – über die GPS-Daten |
 | `Anna`, `Person 7` | Fotos mit dieser Person (Name oder Nummer einer unbenannten Gruppe) |
 | `Urlaub 2023` oder `Album Urlaub 2023` | Fotos in diesem Album |
+| `Reisen + Paris` | Fotos, die in beiden Alben sind (mit `+` beliebig viele Alben) |
 | `ohne Album` | Fotos, die in keinem Album sind |
 | `0012`, `12345` | Ordner 0012 bzw. 12345 |
 | `Alle Fotos` | das ganze Archiv |
@@ -142,6 +143,9 @@ Kombiniert wird so:
 - **verschiedene Arten müssen alle zutreffen:** `2023, Leipzig, Anna` = aus 2023, bei Leipzig und mit Anna;
 - **gleiche Art heißt „eines davon“:** `2022, 2023`, `Leipzig, Dresden` oder `Urlaub, Familie`;
 - **Personen müssen alle auf dem Foto sein:** `Anna, Ben` zeigt nur Fotos mit beiden.
+- **Alben mit `+` müssen alle zutreffen:** `Reisen + Paris` zeigt nur Fotos, die in beiden Alben sind –
+  `Reisen, Paris` dagegen alle aus einem der beiden. Beides lässt sich kombinieren: `Reisen + Paris, Familie`
+  = in Reisen und Paris oder in Familie; `Reisen + Paris, 2023` = in beiden Alben und aus 2023.
 
 Mehrere Wörter ohne Komma gelten einzeln, wenn jedes für sich ein Begriff ist (`Juli 2023`); sonst zählt
 der ganze Text – als Album, Person oder Ort, und wenn nichts davon passt, als Teil des Dateinamens.

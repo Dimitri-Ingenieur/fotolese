@@ -1014,7 +1014,9 @@ def kopf(app, aktiv="", inhalt_titel="", suchtext=""):
     suche = ""
     if app.index:
         suche = (f'<form class="suche" action="/suche" role="search"><input name="q" value="{e(suchtext)}" '
-                 f'placeholder="Filter, z. B. 2023, Leipzig, Anna" aria-label="Filter"><button class="knopf">Filtern</button>'
+                 f'placeholder="Filter, z. B. 2023, Leipzig, Anna" aria-label="Filter" title="Begriffe mit Komma trennen. '
+                 f'Alben mit + verknüpft zeigen Fotos, die in allen sind: Reisen + Paris">'
+                 f'<button class="knopf">Filtern</button>'
                  f'<a class="knopf" href="/suche?{urlencode({"q": ALLE_FOTOS})}" title="Alle Fotos nach Datum – '
                  f'zum Einordnen in Alben und Jahre">{ALLE_FOTOS}</a>'
                  f'<a class="knopf" href="/suche?{urlencode({"q": OHNE_ALBUM})}" title="Fotos, die noch in keinem '
@@ -1344,7 +1346,8 @@ def such_seite(app, text, seite_nr):
         inhalt += f'<div class="filter" aria-label="Erkannter Filter">{chips}</div>'
     if not text.strip():
         inhalt += ('<p class="leer">Geben Sie Begriffe mit Komma getrennt ein, z. B. 2023, Leipzig, Anna – '
-                   'oder „Alle Fotos“ für das ganze Archiv.</p>')
+                   'oder „Alle Fotos“ für das ganze Archiv. Reisen + Paris zeigt die Fotos, die in beiden Alben '
+                   'sind.</p>')
     elif not eintraege and ohne_album and len(erklaerung) == 1:
         inhalt += '<p class="leer">Jedes Foto ist in mindestens einem Album.</p>'
     elif not eintraege:
