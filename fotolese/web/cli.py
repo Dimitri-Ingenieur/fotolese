@@ -56,6 +56,8 @@ Verbessern (ComfyUI, z. B. auf demselben Rechner, Port 8188):
   Original bleibt. Danach zeigt der Schieber Vorher/Nachher (Taste V); nach dem Neuladen steht die Fassung als
   eigene Kachel hinter dem Original und lässt sich wie jedes Foto mit Stern markieren. Workflows: in ComfyUI mit
   „Export (API)“ speichern und in den Ordner workflows neben bestof.py legen (WORKFLOWS); jede Datei = eine Wahl.
+  Speichert ein Workflow mehrere Bilder (z. B. „restored“ und „upscaled“), gilt das Endergebnis: der Speicher-Knoten
+  am Ende der Kette oder der mit „fotolese“ im Titel.
   Kolorieren (braucht ffmpeg) ist ein eigener Knopf „◐ Kolorieren“ in der Lupe: färbt das gezeigte Foto ein – das
   Original direkt oder eine verbesserte Fassung –, optional mit Farbhinweisen. Ergebnis <Name>_koloriert.png im
   Unterordner verbessert; Helligkeit und Details aus dem Foto (Luma-Lock), nur die Farbe von ComfyUI. Workflow:

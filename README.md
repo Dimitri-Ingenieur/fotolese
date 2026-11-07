@@ -334,7 +334,9 @@ Ordner `workflows/` neben `bestof.py` legen (anderer Ort: `WORKFLOWS` in `bestof
 Name kommt aus dem Dateinamen (`Foto_restore_API.json` → „Foto restore“). Welcher in der Lupe vorgewählt
 ist, legt `VERBESSERN_WORKFLOW` fest (leer = der zuletzt gewählte). bestof.py setzt das Foto in den Bild-Eingang (`LoadImage` oder ein anderer Knoten mit dem
 Eingang `image`; bei mehreren den, in dessen Titel „fotolese“ steht), würfelt den Seed jedes Mal neu
-und holt das Bild des Speicher-Knotens (`Save Image`). Ein Workflow im normalen statt im API-Format
+und holt das Bild des Speicher-Knotens (`Save Image`). Speichert ein Workflow mehrere Bilder, etwa erst
+„restored“ und danach eine hochskalierte Fassung, nimmt bestof.py das Endergebnis: den Speicher-Knoten am
+Ende der Kette – oder den, in dessen Titel „fotolese“ steht. Ein Workflow im normalen statt im API-Format
 wird beim Start mit Hinweis übersprungen. Mitgeliefert sind „Foto restore“ (Qwen) und „Foto restore
 flux2“ (Flux 2), beide auch zum Kolorieren (siehe
 [Daten und Modelle von Dritten](#daten-und-modelle-von-dritten)).

@@ -3,7 +3,8 @@
 Ein Workflow ist eine in ComfyUI mit „Export (API)“ gespeicherte JSON-Datei im Ordner WORKFLOWS (Standard:
 workflows/ neben bestof.py); jede Datei ist eine Wahl neben „Verbessern“. bestof lädt das Foto hoch, setzt es in
 den Bild-Eingang (LoadImage oder ein anderer Knoten mit dem Text-Eingang „image“; gibt es mehrere, den mit
-„fotolese“ im Titel), würfelt die Seeds neu und holt das Bild des Speicher-Knotens ab. Gespeichert wird verlustfrei
+„fotolese“ im Titel), würfelt die Seeds neu und holt das Bild des Speicher-Knotens ab – bei mehreren das Endergebnis
+(end_speicher: der mit „fotolese“ im Titel, sonst der am Ende der Kette, z. B. nach dem Hochskalieren). Gespeichert wird verlustfrei
 als PNG in SORTIERT/<Ordner>/verbessert/<Name>_<Workflow>.png – mit dem EXIF des Originals (Datum, Ort; die Drehung
 steckt dann schon im Bild) und der Workflow-Beschreibung, die ComfyUI ins PNG schreibt. Von Hand gesetztes Jahr
 und Alben übernimmt die neue Fassung vom Original. Stehen Farbhinweise im Feld der Lupe, kommen sie ans Ende des
@@ -101,6 +102,33 @@ class Workflows:
             w["fehler"] = ("kein Bild-Eingang (z. B. LoadImage)" if not eingaenge
                            else "mehrere Bild-Eingänge – den richtigen Knoten im Titel mit „fotolese“ kennzeichnen")
         return w
+
+
+def end_speicher(wf):
+    """Der Speicher-Knoten mit dem Endergebnis: der einzige; bei mehreren der mit „fotolese“ im Titel, sonst der am Ende
+    der Kette (längster Weg zu ihm im Graphen, z. B. „upscaled“ nach „restored“), bei Gleichstand die höchste Nummer.
+    None ohne Speicher-Knoten."""
+    knoten = {k: v for k, v in wf.items() if isinstance(v, dict) and isinstance(v.get("inputs"), dict)}
+    speicher = [k for k, v in knoten.items() if "save" in str(v.get("class_type", "")).lower()]
+    if len(speicher) < 2:
+        return speicher[0] if speicher else None
+    markiert = [k for k in speicher if "fotolese" in str((knoten[k].get("_meta") or {}).get("title", "")).lower()]
+    if len(markiert) == 1:
+        return markiert[0]
+    tiefe = {}
+
+    def stufe(k, weg=()):  # Stufen bis zu diesem Knoten; ein Kreis (gibt es in ComfyUI nicht) zählt nicht weiter
+        if k not in knoten or k in weg:
+            return 0
+        if k not in tiefe:
+            quellen = [v[0] for v in knoten[k]["inputs"].values()
+                       if isinstance(v, list) and len(v) == 2 and isinstance(v[0], str)]
+            tiefe[k] = 1 + max((stufe(q, weg + (k,)) for q in quellen), default=0)
+        return tiefe[k]
+
+    def nummer(k):
+        return int(k) if k.isdigit() else -1
+    return max(markiert or speicher, key=lambda k: (stufe(k), nummer(k)))
 
 
 def _comfy_fehler(code, text):
@@ -372,7 +400,13 @@ class Auftrag(threading.Thread):
         return {"name": anzeige(neu), "id": uid, "g": f"/g/{self.ordner}/{uid}?v={mt}", "o": f"/orig/{self.ordner}/{uid}"}
 
     def _abholen(self, eintrag, wf):
-        roh = self._bild_holen(eintrag, wf)
+        ende = end_speicher(wf)  # mehrere Speicher-Knoten (z. B. „restored“ und „upscaled“): das Endergebnis
+        try:
+            roh = self._bild_holen(eintrag, wf, knoten=ende)
+        except Fehler:
+            if ende is None:
+                raise
+            roh = self._bild_holen(eintrag, wf)  # der lieferte nichts: wie früher irgendein gespeichertes Bild
         self.status["phase"] = "Speichern"
         return self._ergebnis(speichern(self.v.app, self.ordner, self.name, roh, self.workflow))
 
