@@ -67,6 +67,15 @@ GRUPPEN = [
         Feld("PRO_SEITE", "Ordner je Übersichtsseite", "int", 120, "", (12, 2000)),
         Feld("NAEHE_KM", "Umkreis für Ortsfilter (km)", "float", 15.0, "", (0.5, 500)),
     ]),
+    ("aehnlich", "Ähnliche Fotos",
+     "Knopf „≈ Ähnliche“ in der Lupe: Die KI (Bildmodell CLIP) vergleicht den Bildinhalt. Die Merkmale berechnet der "
+     "Index einmal je Foto auf der CPU; die Fotos bleiben auf dem Rechner.", [
+         Feld("KI", "KI-Suche", "bool", True, "Aus = nur fast gleiche Fotos per Bildvergleich wie beim Import. Gilt nach "
+              "dem Neustart."),
+         Feld("AEHNLICH_MIN", "Ähnlich ab (%)", "int", 72, "Darunter zeigt die Seite ein Foto nicht. 80 = nur deutlich "
+              "Ähnliches, 65 = auch entfernt Ähnliches.", (0, 99)),
+         Feld("AEHNLICH_ANZAHL", "Höchstens so viele Fotos", "int", 150, "", (1, 1000)),
+     ]),
     ("personen", "Personen",
      "bestof.py lernt Schwelle und Abstand aus Ihren Korrekturen nach (siehe Seite „Personen“).", [
          Feld("PERSON_SCHWELLE", "Ähnlichkeit für dieselbe Person", "float", 0.40, "Höher = strenger.", (0.1, 0.95)),
@@ -137,6 +146,9 @@ ZUGRIFF = {  # Name -> (aktueller Wert oder None = aus bestof.conf lesen, sofort
     "MAX_BEST": ((lambda app: app.auswahl.max_best), (lambda app, w: setattr(app.auswahl, "max_best", w))),
     "PRO_SEITE": _app_attr("pro_seite"),
     "NAEHE_KM": _app_attr("naehe_km"),
+    "KI": _app_attr("ki"),  # wirkt erst nach dem Neustart: der Index entscheidet beim Start
+    "AEHNLICH_MIN": _app_attr("aehnlich_min"),
+    "AEHNLICH_ANZAHL": _app_attr("aehnlich_anzahl"),
     "PERSON_SCHWELLE": _app_attr("person_schwelle"),
     "ABSTAND": _app_attr("abstand"),
     "LERNEN": _app_attr("lernen"),
@@ -254,6 +266,18 @@ def feld_daten(app, feld):
         d["hinweis"] = f"Läuft noch mit {app.verbesserer.comfy.basis} – gilt nach dem Neustart."
     elif feld.name == "COMFYUI" and not app.verbesserer and w != "0":
         d["hinweis"] = "Verbessern ist aus – gilt nach dem Neustart."
+    elif feld.name == "KI":
+        start = getattr(app, "ki_beim_start", w)
+        if bool(w) != bool(start):
+            d["hinweis"] = f"Läuft noch {'mit' if start else 'ohne'} KI – gilt nach dem Neustart."
+        elif w and app.indexer:
+            zustand, grund = app.indexer.ki_zustand()
+            s = app.indexer.status
+            if zustand == "bereit":
+                d["hinweis"] = (f"Rechnet gerade: {s['fertig']} von {s['gesamt']} Bildern." if s["phase"] == "KI" else
+                                f"Bereit – KI-Merkmale für {len(app.indexer.ki.daten()[0])} Fotos.")
+            else:
+                d["hinweis"] = "Wird vorbereitet …" if zustand == "vorbereitung" else f"Aus: {grund}."
     return d
 
 

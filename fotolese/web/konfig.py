@@ -46,6 +46,11 @@ LERNEN_AB = 5            # neu lernen nach so vielen korrigierten Fehlzuordnunge
 # GESICHT_SCORE = 0.50
 # GEGENPROBE = 0.80
 
+# ---- Ähnliche Fotos (Lupe „≈ Ähnliche“) – KI-Modell CLIP, siehe README ----
+# KI = 1                 # 0 = keine KI-Suche, dann nur fast gleiche Fotos per Bildvergleich
+# AEHNLICH_MIN = 72      # ab so viel Prozent Ähnlichkeit zeigen
+# AEHNLICH_ANZAHL = 150  # höchstens so viele Fotos
+
 # ---- GPU – Gesichtserkennung auf der Grafikkarte, siehe README (Abschnitt GPU) ----
 # GPU = auto             # auto = GPU, wenn eine nutzbar ist; 0 = nur CPU; oder z. B. cuda, opencl
 # GPU_JOBS = 2           # so viele Index-Prozesse rechnen auf der GPU, die übrigen auf der CPU

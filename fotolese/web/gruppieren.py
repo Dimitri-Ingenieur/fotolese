@@ -265,14 +265,16 @@ def index_umziehen(app, paare):
             veraltet = db.execute("SELECT id, person, emb FROM gesicht WHERE pfad=?", (neu,)).fetchall()
             if veraltet and app.indexer:
                 app.indexer._personen_abziehen(db, veraltet)
-            for tabelle in ("gesicht", "bild", "jahr_manuell", "album_bild", "pruefsumme"):
+            for tabelle in ("gesicht", "bild", "jahr_manuell", "album_bild", "pruefsumme", "ki"):
                 db.execute(f"DELETE FROM {tabelle} WHERE pfad=?", (neu,))
             ordner, uid = neu.split("/", 1)
             db.execute("UPDATE bild SET pfad=?, ordner=?, datei=? WHERE pfad=?", (neu, ordner, uid, alt))
             db.execute("UPDATE gesicht SET pfad=?, ordner=? WHERE pfad=?", (neu, ordner, alt))
-            for tabelle in ("jahr_manuell", "album_bild", "pruefsumme"):
+            for tabelle in ("jahr_manuell", "album_bild", "pruefsumme", "ki"):  # KI-Merkmal: gleiche Datei, bleibt
                 db.execute(f"UPDATE {tabelle} SET pfad=? WHERE pfad=?", (neu, alt))
         db.commit()
+    if app.indexer:
+        app.indexer.ki.stand += 1
 
 
 def _stern_name(rel):

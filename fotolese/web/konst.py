@@ -30,5 +30,11 @@ MODELLE = {
               "face_recognition_sface_2021dec.onnx",
               "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79"),
 }
+# KI-Suche „Ähnliche Fotos“: Bildteil von OpenAIs CLIP ViT-B/32 (MIT) als ONNX, umgewandelt von Xenova für
+# transformers.js; feste Fassung (Commit) und Prüfsumme. (Datei, Adresse, SHA-256, Größe in Bytes)
+KI_MODELL = ("clip-vit-base-patch32-vision.onnx",
+             "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/6b7c523703ae26e39be4b03774966f8571c7f523/"
+             "onnx/vision_model.onnx",
+             "fd6e1402a588279d1723c7534d4bcba5bc0b14b47dfab0e46f8c47b8270d7d40", 351_685_709)
 Image.MAX_IMAGE_PIXELS = None
 ImageFile.LOAD_TRUNCATED_IMAGES = True  # abgeschnittene Dateien so weit wie möglich zeigen

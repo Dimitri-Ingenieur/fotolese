@@ -522,7 +522,7 @@ def analyse_text(erg):
 
 # ---- Ähnliche Fotos zu einem Foto
 
-def aehnliche(bilder, bezug, anzahl=150, bis=48):
+def aehnliche(bilder, bezug, anzahl=150, bis=24):
     """Die Bilder, die bezug am ähnlichsten sind: pHash+dHash-Abstand ≤ bis, nach Abstand sortiert, höchstens anzahl.
     Ohne bezug selbst und seine Aufnahme (gleicher Ordner und Namensstamm, z. B. die NEF zum JPG) und ohne NEF, zu der
     es im selben Ordner ein JPG/PNG gibt (bestof zeigt das JPG). Rückgabe: [(Datei, Abstand, Sekunden oder None)] –
@@ -562,7 +562,7 @@ def aehnlich_main(args, jobs, cache_pfad):
             or not os.path.isfile(pfad) or os.path.splitext(pfad)[1].lower() not in BILD_EXT:
         sys.exit(f"Fehler: {args[1]} ist kein Bild in einem Ordner 0000–99999 von {ausgabe}.")
     anzahl = max(1, _env("AEHNLICH_ANZAHL", 150, int))
-    bis = min(128, max(0, _env("AEHNLICH_BIS", 48, int)))
+    bis = min(128, max(0, _env("AEHNLICH_BIS", 24, int)))
     info(f"fotosort {VERSION} · Modus aehnlich · {rel}")
     bilder = suche_archiv(ausgabe)
     echt = os.path.realpath(pfad)

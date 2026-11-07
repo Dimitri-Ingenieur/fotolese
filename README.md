@@ -21,7 +21,7 @@ auch selbst aufrufen – dann müssen Sie fotosort.py nicht von Hand starten.
 - schreibt ein Protokoll; `MODUS=undo` macht einen Lauf rückgängig
 - plant eine Neu-Gruppierung des ganzen Archivs (`MODUS=gruppen`) und nennt die Ähnlichkeitswerte, mit denen
   bestimmte Ordner zusammengekommen wären (`MODUS=analyse`) – ausgeführt wird in bestof.py
-- nennt zu einem Foto die ähnlichsten im Archiv, nach Ähnlichkeit sortiert (`MODUS=aehnlich`)
+- nennt zu einem Foto die fast gleichen im Archiv (`MODUS=aehnlich`)
 
 **bestof.py** – Weboberfläche im Browser (Paket `fotolese/web/`)
 - je Ordner bis zu 3 beste Fotos mit Stern ☆ markieren → Kopie in `Sortiert/BestOf`
@@ -30,9 +30,9 @@ auch selbst aufrufen – dann müssen Sie fotosort.py nicht von Hand starten.
 - Alben: jedes Foto in beliebig vielen Alben, sichtbar unter dem Foto, im Filter nutzbar ([mehr](#alben))
 - „Alle Fotos“, „Ohne Album“ und Jahr per Klick: das Archiv durchgehen, Alben und Jahre schnell zuordnen
   ([mehr](#alle-fotos-und-jahr-per-klick))
-- Ähnliche Fotos: „≈ Ähnliche“ in der Lupe zeigt die ähnlichsten Fotos im ganzen Archiv, nach Ähnlichkeit
-  sortiert, jedes mit seinem Abstand; gefundene Fotos lassen sich zum Ausgangsfoto verschieben
-  ([mehr](#ähnliche-fotos))
+- Ähnliche Fotos mit KI: „≈ Ähnliche“ in der Lupe zeigt die ähnlichsten Fotos im ganzen Archiv – verglichen wird
+  der Bildinhalt (Bildmodell CLIP, lokal auf der CPU), jedes Foto mit seiner Ähnlichkeit in Prozent; gefundene
+  Fotos lassen sich zum Ausgangsfoto verschieben ([mehr](#ähnliche-fotos))
 - Papierkorb: ein Klick schiebt ein Foto nach `Sortiert/Musor`, mit „Rückgängig“; endgültig gelöscht wird
   nur im Dateimanager ([mehr](#papierkorb))
 - im Heimnetz erreichbar, z. B. `http://tigris:8765` vom Tablet; importieren nur am Rechner selbst
@@ -67,6 +67,8 @@ conda activate fotosort
 
 Oder pip: `python -m pip install -r requirements.txt`, mit GPU `requirements-gpu.txt`.
 Eine vorhandene Umgebung bekommt die GPU-Pakete mit `conda env update -f environment-gpu.yml`.
+Die KI-Suche für [Ähnliche Fotos](#ähnliche-fotos) braucht OpenCV ab Version 5 oder ONNX Runtime (in den
+GPU-Paketen enthalten); eine ältere Umgebung bringt `python -m pip install -U opencv-python-headless` auf Stand.
 AMD, Intel und DirectML unter Windows: siehe [GPU](#gpu).
 
 ## Nutzung
@@ -206,38 +208,48 @@ leeren + Enter im Feld unter dem Foto gibt wieder das Jahr aus der Datei.
 
 ### Ähnliche Fotos
 
-In der Lupe sucht **≈ Ähnliche** zum gezeigten Foto die ähnlichsten im ganzen Archiv. Gerechnet wird wie
-beim Import: fotosort.py kennt von jedem Foto zwei Wahrnehmungs-Fingerabdrücke (pHash und dHash, je 64 Bit),
-der Abstand zählt die Bits, in denen sie sich unterscheiden – 0 heißt gleich, um 60 ganz verschieden. Die
-Seite zeigt vorn das Ausgangsfoto, dahinter die Treffer nach Abstand sortiert, jeden mit Abstand und Wort:
+In der Lupe sucht **≈ Ähnliche** zum gezeigten Foto die ähnlichsten im ganzen Archiv. Verglichen wird der
+Bildinhalt mit dem KI-Bildmodell [CLIP](https://github.com/openai/CLIP): Zu einem Kind am Hafen findet es
+andere Hafen- und Kinderfotos, auch mit anderem Ausschnitt, Licht oder Format. Die Seite zeigt vorn das
+Ausgangsfoto, dahinter die Treffer nach Ähnlichkeit sortiert, jeden mit einem Wert in Prozent:
 
-| Abstand | Wort | meist |
+| Ähnlichkeit | Wort | meist |
 |---|---|---|
-| 0 | gleich | dieselbe Aufnahme, auch in anderer Größe |
-| 1–8 | fast gleich | andere Kompression, leicht nachbearbeitete Kopie |
-| bis `SCHWELLE` (20) | sehr ähnlich | beim Import kämen die Fotos in eine Gruppe – Abstand in Gelb |
-| bis 36 | ähnlich | Serienbilder, dasselbe Motiv kurz danach |
-| bis 48 | entfernt ähnlich | ähnlicher Bildaufbau, oft schon ein anderes Motiv |
+| ab 95 % | fast gleich | dieselbe Aufnahme, Serienbild, Kopie oder Ausschnitt |
+| ab 88 % | sehr ähnlich | dieselbe Szene, derselbe Ort am selben Tag – Wert in Gelb |
+| ab 80 % | ähnlich | dasselbe Motiv, eine ähnliche Situation |
+| ab 72 % | entfernt ähnlich | ähnlicher Bildaufbau, verwandtes Motiv |
 
-Mit der Maus über dem Abstand stehen Einzelheiten, bei Fotos derselben Kamera auch, wie viele Sekunden
-dazwischen liegen. Gezeigt werden höchstens 150 Fotos bis Abstand 48 (`AEHNLICH_ANZAHL`, `AEHNLICH_BIS` als
-Umgebungsvariablen beim Start von bestof.py). Das Foto selbst und seine NEF fehlen in der Liste, ebenso
-einfarbige und unlesbare Fotos – die lassen sich nicht vergleichen. Die Fassungen im Unterordner `verbessert`
-(verbessert, koloriert, bearbeitet) stehen nicht in der Liste, taugen aber als Ausgangsfoto.
+Gezeigt werden höchstens 150 Fotos ab 72 % (`AEHNLICH_ANZAHL`, `AEHNLICH_MIN`, beides auch auf der Seite
+[Einstellungen](#einstellungen)). Die Fassungen des Fotos selbst (verbessert, koloriert, bearbeitet) fehlen in
+der Liste, die stehen ohnehin im Ordner daneben. Ausgangsfoto kann jedes Foto sein, auch eine Fassung.
 
-Beim ersten Mal liest fotosort.py alle Fotos, die es noch nicht kennt; bei einem großen Archiv dauert das,
-die Seite zeigt den Fortschritt. Danach kommen die Fingerabdrücke aus dem Cache, und eine Suche braucht nur
-Sekunden. „Neu suchen“ rechnet noch einmal.
+**Einmal vorbereiten:** Beim ersten Start lädt bestof.py das Modell (352 MB, von Hugging Face, mit Prüfsumme)
+nach `~/.cache/fotosort/modelle`. Danach berechnet der Index für jedes Foto einmal KI-Merkmale – nach Datum,
+Orten und Gesichtern, auf der CPU im Hintergrund. Die Kopfzeile zeigt den Stand, z. B. „KI-Suche: 1200 von
+50000 Bildern gelesen“. Auf dem Testrechner mit vier Kernen dauerte das rund 20 Minuten je 50.000 Fotos;
+von einer USB-Festplatte kann das Lesen länger dauern, deshalb nimmt der Index, wo es sie schon gibt, die
+Vorschaubilder statt der Originale. Danach kommt jedes Ergebnis sofort, neue Fotos bekommen ihre Merkmale
+beim nächsten Durchgang. Fragen Sie vorher, wartet die Seite kurz: Das gewählte Foto ist als Nächstes dran.
+
+Die Merkmale stehen im Index (`Sortiert/.bestof-index.sqlite3`, 1 KB je Foto) und wandern beim Verschieben mit.
+Gerechnet wird mit ONNX Runtime oder, wenn das fehlt, mit OpenCV ab Version 5 (neue Installationen bringen es
+mit). Bei älterem OpenCV ohne ONNX Runtime nennt bestof.py den Befehl zum Aktualisieren:
+`python -m pip install -U opencv-python-headless`. `KI = 0` schaltet die KI-Suche ab.
+
+**Ohne KI** (`KI = 0`, `INDEX = 0` oder das Modell nicht ladbar) vergleicht fotosort.py wie beim Import pHash
+und dHash. Das findet nur fast gleiche Fotos – dieselbe Aufnahme in anderer Größe, Serienbilder, nachbearbeitete
+Kopien – bis zum Abstand 24 (`AEHNLICH_BIS`); darüber wären die Treffer Zufall. Auf der Kommandozeile:
+
+```bash
+MODUS=aehnlich python fotosort.py AUSGABE 0004/IMG_0001.JPG   # fast gleiche Fotos zu diesem Foto
+```
 
 Sonst ist die Seite ein Kontaktbogen wie ein Ordner: Lupe, Stern, Papierkorb, Alben und Jahr gehen auch
 hier. **Fotos verschieben …** holt Treffer zum Ausgangsfoto: Fotos anklicken (Umschalt = Bereich), dann
 „Zu 0004 (Ausgangsfoto)“ – oder wie auf der Ordnerseite „In neue Gruppe“ bzw. eine Ordnernummer eintippen.
 Alles wandert mit wie beim [Verschieben](#ordner-zusammenfassen-und-neu-gruppieren), die Meldung hat
-„Rückgängig“, und die Seite sucht danach neu. Auf der Kommandozeile:
-
-```bash
-MODUS=aehnlich python fotosort.py AUSGABE 0004/IMG_0001.JPG   # die ähnlichsten Fotos zu diesem Foto
-```
+„Rückgängig“, und die Seite sucht danach neu.
 
 ### Papierkorb
 
@@ -423,6 +435,8 @@ Die Seite „Einstellungen“ zeigt die wichtigsten Werte aus `bestof.conf` und 
   jeden Workflow mit seinem Zustand; „Workflow hochladen …“ legt eine JSON-Datei im API-Format in den
   Ordner `workflows`.
 - **Kolorieren:** die Werte aus der Tabelle oben.
+- **Ähnliche Fotos:** KI-Suche an oder aus (gilt nach dem Neustart), ab wie viel Prozent ein Foto als ähnlich
+  gilt, höchstens wie viele Fotos.
 - **Anzeige, Personen, Import:** Sterne je Ordner, Ordner je Übersichtsseite, Umkreis für den Ortsfilter;
   Ähnlichkeit für dieselbe Person, Abstand, Lernen; Prozesse für fotosort.py.
 
@@ -435,7 +449,8 @@ nach einem Neustart wieder.
 ## GPU
 
 Die Gesichtserkennung in bestof.py (Index, Gegenprobe, Klick ins Gesicht) rechnet auf der
-Grafikkarte, wenn eine nutzbar ist – ohne Einstellung. Beim Start prüft bestof.py die vorhandenen
+Grafikkarte, wenn eine nutzbar ist – ohne Einstellung. (Die KI-Merkmale für „Ähnliche Fotos“ rechnet der
+Index immer auf der CPU; so bleibt die Grafikkarte frei für ComfyUI.) Beim Start prüft bestof.py die vorhandenen
 Möglichkeiten und nimmt die erste, die dieselben Ergebnisse wie die CPU liefert und schneller ist;
 sonst bleibt alles auf der CPU. Gesichter und Merkmale sind auf GPU und CPU gleich, ein Wechsel löst
 keine neue Gesichtssuche aus.
@@ -504,7 +519,7 @@ fotolese/                    Projektordner
 │   │   ├── gruppe.py        Duplikate (SHA-256), Gruppierung, passende Bestandsordner
 │   │   ├── plan.py          Zielnamen mit Laufindex, Verschiebeplan
 │   │   ├── lauf.py          verschieben, kopieren, verlinken; Protokoll; Rückgängig
-│   │   ├── neu.py           Neu-Gruppierung des Archivs (Plan), Analyse nötiger Werte, ähnliche Fotos
+│   │   ├── neu.py           Neu-Gruppierung des Archivs (Plan), Analyse nötiger Werte, fast gleiche Fotos
 │   │   └── cli.py           main() und Hilfetext (-h)
 │   └── web/                 bestof: durchsehen, filtern, Sterne für BestOf
 │       ├── konst.py         Konstanten, Muster, Monatsnamen, Quellen der Modelle
@@ -527,7 +542,8 @@ fotolese/                    Projektordner
 │       ├── lernen.py        aus Korrekturen Schwelle und Abstand lernen
 │       ├── importieren.py   Seite „Import“ (nur am Rechner selbst): fotosort.py, Duplikate
 │       ├── gruppieren.py    Ordner zusammenfassen, Plan ausführen, Rückgängig (Umzug mit Index)
-│       ├── aehnlich.py      Seite „Ähnliche Fotos“: Treffer von fotosort als Kontaktbogen
+│       ├── aehnlich.py      Seite „Ähnliche Fotos“: Treffer der KI (ohne KI: von fotosort) als Kontaktbogen
+│       ├── ki.py            KI-Merkmale mit CLIP: Vorverarbeitung, Rechenprozess, Suche im Speicher
 │       ├── einstellungen.py Seite „Einstellungen“, Workflows hochladen
 │       └── cli.py           main() und Hilfetext (-h)
 ├── workflows/               ComfyUI-Workflows (API-Format) für „Verbessern“
@@ -547,8 +563,8 @@ fotolese/                    Projektordner
   Verbunden sind sie nur über Unterprozesse: `web/importieren.py` startet `fotosort.py` mit demselben
   Python – für den [Import im Browser](#import-im-browser) mit `MODUS=copy`, `DUPLIKATE=1`, `JOBS` aus
   `IMPORT_JOBS`, für die Analyse und die Vorschau von „Neu gruppieren“ mit `MODUS=analyse` bzw.
-  `MODUS=gruppen` (Plan als JSON in `Sortiert/.bestof-umzug/`), für [Ähnliche Fotos](#ähnliche-fotos) mit
-  `MODUS=aehnlich`, immer mit den Ähnlichkeitswerten aus den Einstellungen, `JA=1` und `FORTSCHRITT_JSON=1`.
+  `MODUS=gruppen` (Plan als JSON in `Sortiert/.bestof-umzug/`), für [Ähnliche Fotos](#ähnliche-fotos) ohne KI
+  mit `MODUS=aehnlich`, immer mit den Ähnlichkeitswerten aus den Einstellungen, `JA=1` und `FORTSCHRITT_JSON=1`.
   bestof.py liest die Ausgabe mit: `#FS {json}`-Zeilen (aus `sort/bericht.py`) für Fortschritt und
   Ergebnisse, die Zeile `Protokoll: …` für „Import rückgängig“.
   Verschoben wird beim Neu-Gruppieren von `web/gruppieren.py`, damit Sterne, Alben und Index mitwandern.
@@ -557,8 +573,10 @@ fotolese/                    Projektordner
 
 - Alles läuft lokal. Fotos verlassen den Rechner nicht – außer zum ComfyUI unter `COMFYUI`, wenn Sie
   „Verbessern“ nutzen (Standard: derselbe Rechner).
-- Der Index `Sortiert/.bestof-index.sqlite3` enthält Gesichtsmerkmale (biometrische Daten).
-  Geben Sie ihn nicht weiter.
+- Der Index `Sortiert/.bestof-index.sqlite3` enthält Gesichtsmerkmale (biometrische Daten) und die
+  KI-Merkmale der Fotos. Geben Sie ihn nicht weiter.
+- Für „Ähnliche Fotos“ lädt bestof.py einmal das KI-Modell CLIP von Hugging Face herunter. Gerechnet wird damit
+  auf dem eigenen Rechner; die Fotos werden nicht hochgeladen.
 - Die Weboberfläche ist im Heimnetz erreichbar ([Im Heimnetz](#im-heimnetz)); ohne `PASSWORT` kann dort
   jeder die Fotos sehen. In fremden Netzen (Laptop unterwegs) `HOST=127.0.0.1` oder ein `PASSWORT` setzen.
 
@@ -571,6 +589,7 @@ Nicht Teil dieses Repositorys. bestof.py lädt sie beim ersten Start nach `~/.ca
 | Ortsdaten cities1000 | [GeoNames](https://www.geonames.org) | CC BY 4.0 |
 | Gesichtserkennung YuNet | [OpenCV Zoo](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet) | MIT |
 | Gesichtsmerkmale SFace | [OpenCV Zoo](https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface) | Apache-2.0 |
+| KI-Bildmodell CLIP ViT-B/32 (Bildteil) für „Ähnliche Fotos“ | [OpenAI](https://github.com/openai/CLIP), ONNX-Fassung von [Xenova](https://huggingface.co/Xenova/clip-vit-base-patch32) | MIT |
 
 Der mitgelieferte Workflow `workflows/Foto_restore_API.json` („Qwen Image 2.1 Restore“) stammt von
 [AusBoss](https://github.com/ausboss). Er braucht ComfyUI 0.38 oder neuer, die Knoten

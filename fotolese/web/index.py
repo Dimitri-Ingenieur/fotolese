@@ -1,13 +1,16 @@
-"""fotolese.web.index – SQLite-Index (Bilder, Gesichter, Personen) und der Indexer-Thread.
+"""fotolese.web.index – SQLite-Index (Bilder, Gesichter, Personen, KI-Merkmale) und der Indexer-Thread.
 
 Der Indexer lädt Orts- und Gesichtsmodelle, wählt das Rechenwerk (GPU, sonst CPU – siehe gpu),
-liest neue Bilder in einem Prozess-Pool (gesichter._iw_job) und ordnet Gesichter Personen zu.
+liest neue Bilder in einem Prozess-Pool (gesichter._iw_job) und ordnet Gesichter Personen zu. Danach berechnet er
+die KI-Merkmale für „Ähnliche Fotos“ (ki._kw_job, ein eigener Prozess auf der CPU).
 """
+import contextlib
 import hashlib
+import math
 import os
-import shutil
 import sqlite3
 import threading
+import time
 import traceback
 import urllib.request
 import multiprocessing as mp
@@ -18,8 +21,9 @@ from importlib.util import find_spec
 
 import numpy as np
 
-from fotolese.web import gpu
-from fotolese.web.konst import GEONAMES_URL, MODELLE
+from fotolese.web import gpu, ki
+from fotolese.web.konst import GEONAMES_URL, KI_MODELL, MODELLE
+from fotolese.web.bild import thumb_schluessel
 from fotolese.web.konfig import bilder_text, url_id
 from fotolese.web.orte import Orte
 from fotolese.web.gesichter import _iw_init, _iw_job, _ueberlappung
@@ -45,6 +49,7 @@ CREATE TABLE IF NOT EXISTS lernlog(zeit TEXT, art TEXT, gid INTEGER, von TEXT, z
 CREATE TABLE IF NOT EXISTS album(id INTEGER PRIMARY KEY, name TEXT NOT NULL, angelegt TEXT);
 CREATE TABLE IF NOT EXISTS album_bild(album INTEGER NOT NULL, pfad TEXT NOT NULL, PRIMARY KEY(album, pfad));
 CREATE INDEX IF NOT EXISTS album_bild_pfad ON album_bild(pfad);
+CREATE TABLE IF NOT EXISTS ki(pfad TEXT PRIMARY KEY, groesse INTEGER, mtime INTEGER, emb BLOB, fehler TEXT);
 DROP VIEW IF EXISTS bild_eff;
 CREATE VIEW bild_eff AS SELECT b.*,
   COALESCE(k.jahr, b.jahr) AS jahr_eff,
@@ -103,6 +108,13 @@ class Indexer(threading.Thread):
         self.weiter = threading.Event()
         self._stopp = False
         self._ex = None
+        # KI-Suche: Merkmale im Speicher, Zustand (aktiv oder Grund, warum nicht) und Fotos, auf die eine Seite wartet
+        self.ki = ki.KiSuche(app.index)
+        self.ki_aktiv, self.ki_grund, self.ki_modell, self.ki_art = False, None, None, None
+        self._ki_wieder = 0.0  # nach einem gescheiterten Download erst später wieder versuchen
+        self.ki_vorrang, self.ki_lock = set(), threading.Lock()
+        if not getattr(app, "ki", True):
+            self.ki_grund, self._ki_wieder = "KI = 0 gesetzt", math.inf
 
     def meldung(self, text):
         print(f"Index: {text}", flush=True)
@@ -115,16 +127,25 @@ class Indexer(threading.Thread):
             self._ex.shutdown(wait=False, cancel_futures=True)
 
     @staticmethod
-    def _laden(url, ziel, sha256=None):
+    def _laden(url, ziel, sha256=None, fortschritt=None):
+        """Datei laden und erst nach bestandener Prüfsumme an ihren Platz legen; fortschritt(Bytes) je MB."""
         os.makedirs(os.path.dirname(ziel), exist_ok=True)
         tmp = ziel + ".laden"
-        with urllib.request.urlopen(url, timeout=60) as antwort, open(tmp, "wb") as f:
-            shutil.copyfileobj(antwort, f, 1 << 20)
-        if sha256:
-            with open(tmp, "rb") as f:
-                if hashlib.sha256(f.read()).hexdigest() != sha256:
-                    os.unlink(tmp)
-                    raise ValueError("Prüfsumme stimmt nicht")
+        summe, n = hashlib.sha256(), 0
+        try:
+            with urllib.request.urlopen(url, timeout=60) as antwort, open(tmp, "wb") as f:
+                while block := antwort.read(1 << 20):
+                    summe.update(block)
+                    f.write(block)
+                    n += len(block)
+                    if fortschritt:
+                        fortschritt(n)
+            if sha256 and summe.hexdigest() != sha256:
+                raise ValueError("Prüfsumme stimmt nicht")
+        except BaseException:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp)
+            raise
         os.replace(tmp, ziel)
 
     def vorbereiten(self):
@@ -198,7 +219,10 @@ class Indexer(threading.Thread):
             while not self._stopp:
                 self.durchlauf()
                 self.status["phase"] = "fertig"
-                self.weiter.wait(self.app.aktualisieren)
+                with self.ki_lock:
+                    offen = bool(self.ki_vorrang)  # eine Seite wartet auf ein Foto, das eben erst dazukam
+                if not offen:
+                    self.weiter.wait(self.app.aktualisieren)
                 self.weiter.clear()
         except Exception:
             traceback.print_exc()
@@ -357,7 +381,9 @@ class Indexer(threading.Thread):
                                                                (p,)).fetchall())
                         db.execute("DELETE FROM gesicht WHERE pfad=?", (p,))
                         db.execute("DELETE FROM bild WHERE pfad=?", (p,))
+                        db.execute("DELETE FROM ki WHERE pfad=?", (p,))
                     db.commit()
+                self.ki.stand += 1
         todo = []
         for rel, (o, name, groesse, mt) in auf_platte.items():
             alt = im_index.get(rel)
@@ -371,13 +397,13 @@ class Indexer(threading.Thread):
                 for p, lat, lon in offen.fetchall():
                     self.index.db.execute("UPDATE bild SET ort=?, ort_km=? WHERE pfad=?", (*self.orte.naechster(lat, lon), p))
                 self.index.db.commit()
-        if not todo:
-            self.personen_zuordnen()
-            return
-        todo.sort(key=lambda a: a[0])
-        self.status.update(phase="Index", fertig=0, gesamt=len(todo))
-        self._verarbeiten(todo)
+        if todo:
+            todo.sort(key=lambda a: a[0])
+            self.status.update(phase="Index", fertig=0, gesamt=len(todo))
+            self._verarbeiten(todo)
         self.personen_zuordnen()
+        if not self._stopp:
+            self.ki_durchlauf(auf_platte)
 
     def _rechner_merken(self, r):
         if r.get("rechner"):
@@ -447,3 +473,156 @@ class Indexer(threading.Thread):
             self._rechner_merken(r)
             self._schreiben([r])
             self.status["fertig"] += 1
+
+    # -- KI-Merkmale für „Ähnliche Fotos“
+    def ki_zustand(self):
+        """(„bereit“ | „vorbereitung“ | „aus“, Text) – für die Seite „Ähnliche Fotos“."""
+        if self.ki_aktiv:
+            return "bereit", ""
+        if self.ki_grund:
+            return "aus", self.ki_grund
+        return "vorbereitung", "Die KI-Suche wird vorbereitet"
+
+    def ki_anfordern(self, rel):
+        """Eine Seite wartet auf das Merkmal dieses Fotos: Im laufenden Durchgang kommt es als Nächstes dran;
+        ruht der Index, beginnt gleich ein Durchgang."""
+        with self.ki_lock:
+            self.ki_vorrang.add(rel)
+        if self.status["phase"] == "fertig":
+            self.weiter.set()
+
+    def _ki_aus(self, grund, fuer_immer=False):
+        self.ki_grund = grund
+        self._ki_wieder = math.inf if fuer_immer else time.time() + 1800
+        self.meldung(f"KI-Suche aus: {grund}.")
+        return False
+
+    def ki_vorbereiten(self):
+        """Modell bereitstellen und einmal probehalber rechnen. Erst nach dem ersten Durchgang: Datum, Orte und
+        Gesichter warten nicht auf den Download (einmalig, rund 350 MB). Rückgabe: ob die KI-Suche rechnen kann."""
+        if self.ki_aktiv:
+            return True
+        if time.time() < self._ki_wieder:
+            return False
+        arten, grund = ki.laufzeiten()
+        if not arten:
+            return self._ki_aus(grund, fuer_immer=True)
+        datei, url, sha, groesse = KI_MODELL
+        ziel = os.path.join(self.app.daten, "modelle", datei)
+        if not os.path.exists(ziel):
+            mb = round(groesse / 1e6)
+            self.status["phase"] = "Lade KI-Modell"
+            self.meldung(f"lade das KI-Bildmodell für „Ähnliche Fotos“ (einmalig, {mb} MB) …")
+
+            def fortschritt(n):
+                self.status["phase"] = f"Lade KI-Modell ({round(n / 1e6)} von {mb} MB)"
+            try:
+                self._laden(url, ziel, sha, fortschritt)
+            except Exception as fehler:
+                return self._ki_aus(f"Modell nicht ladbar ({fehler}) – neuer Versuch in 30 Minuten, oder die Datei "
+                                    f"von {url} nach {ziel} legen")
+        self.status["phase"] = "Prüfe KI-Modell"
+        ctx, gruende, art = mp.get_context("spawn"), [], None
+        for kandidat in arten:  # ONNX Runtime zuerst; rechnet es nicht (z. B. kaputte Installation), OpenCV
+            probe = ProcessPoolExecutor(1, mp_context=ctx)
+            try:
+                probe.submit(ki._probe, ziel, kandidat).result(timeout=600)
+                art = kandidat
+                break
+            except Exception as fehler:
+                gruende.append(f"{kandidat}: {type(fehler).__name__}: {fehler}"[:300])
+            finally:
+                probe.shutdown(wait=False, cancel_futures=True)  # ein hängender Probelauf hält den Index nicht auf
+        if art is None:
+            return self._ki_aus(f"Modell lässt sich nicht rechnen ({'; '.join(gruende)})")
+        with self.index.lock:
+            db = self.index.db
+            alt = db.execute("SELECT v FROM meta WHERE k='ki_modell'").fetchone()
+            if alt is None or alt[0] != ki.KENNUNG:  # anderes Modell oder andere Vorverarbeitung: alles neu
+                db.execute("DELETE FROM ki")
+                db.execute("INSERT OR REPLACE INTO meta VALUES('ki_modell', ?)", (ki.KENNUNG,))
+                db.commit()
+        self.ki_modell, self.ki_art, self.ki_grund, self.ki_aktiv = ziel, art, None, True
+        self.ki.stand += 1
+        self.meldung(f"KI-Suche für „Ähnliche Fotos“ bereit (CLIP, {'ONNX Runtime' if art == 'onnxruntime' else 'OpenCV'}"
+                     f", CPU).")
+        return True
+
+    def _ki_vorrang(self, todo):
+        """Fotos, auf die eine Seite wartet, nach vorn."""
+        with self.ki_lock:
+            vorrang, self.ki_vorrang = self.ki_vorrang, set()
+        if not vorrang:
+            return todo
+        return [a for a in todo if a[0] in vorrang] + [a for a in todo if a[0] not in vorrang]
+
+    def _ki_schreiben(self, ergebnisse):
+        with self.index.lock:
+            self.index.db.executemany("INSERT OR REPLACE INTO ki(pfad, groesse, mtime, emb, fehler) VALUES(?,?,?,?,?)",
+                                      ergebnisse)
+            self.index.db.commit()
+        self.ki.stand += 1
+
+    def _ki_einzeln(self, stapel, ctx, initargs):
+        """Nach einem Absturz: jedes Foto des Stapels in einem frischen Prozess, das schuldige bekommt einen Fehler."""
+        ergebnisse = []
+        for a in stapel:
+            if self._stopp:
+                break
+            with ProcessPoolExecutor(1, mp_context=ctx, initializer=ki._kw_init, initargs=initargs) as einzel:
+                try:
+                    ergebnisse += einzel.submit(ki._kw_job, [a]).result()
+                except BrokenProcessPool:
+                    ergebnisse.append((a[0], a[2], a[3], None, "Absturz beim Lesen"))
+        return ergebnisse
+
+    def ki_durchlauf(self, auf_platte):
+        """Merkmale für alle Fotos ohne (oder mit veraltetem) Merkmal; weg damit, wo es das Foto nicht mehr gibt.
+        Bricht ab, sobald neue Bilder warten (weiter) – dann zuerst der normale Durchgang, danach geht es hier weiter."""
+        if not self.ki_vorbereiten():
+            return
+        vorhanden = {p: (g, m) for p, g, m in self.index.q("SELECT pfad, groesse, mtime FROM ki")}
+        weg = [(p,) for p in vorhanden if p not in auf_platte]
+        if weg:
+            with self.index.lock:
+                self.index.db.executemany("DELETE FROM ki WHERE pfad=?", weg)
+                self.index.db.commit()
+            self.ki.stand += 1
+        vorschau = self.app.vorschau.ordner
+
+        def auftrag(o, name, g, mt):  # mit dem Vorschaubild, falls es schon eins gibt (spart das Lesen des Originals)
+            pfad = os.path.join(self.app.archiv.pfad, o, name)
+            k = thumb_schluessel(pfad, g, mt) if vorschau else ""
+            return pfad, g, mt, os.path.join(vorschau, k[:2], k + ".jpg") if vorschau else None
+        todo = self._ki_vorrang(sorted((rel, *auftrag(o, name, g, mt)) for rel, (o, name, g, mt) in auf_platte.items()
+                                       if vorhanden.get(rel) != (g, mt)))
+        if not todo:
+            return
+        self.status.update(phase="KI", fertig=0, gesamt=len(todo))
+        ctx = mp.get_context("spawn")
+        initargs = (self.ki_modell, self.ki_art, self.app.index_jobs)
+        ex = None
+        try:
+            while todo and not self._stopp and not self.weiter.is_set():
+                todo = self._ki_vorrang(todo)
+                stapel, todo = todo[:ki.STAPEL], todo[ki.STAPEL:]
+                if ex is None:
+                    ex = self._ex = ProcessPoolExecutor(1, mp_context=ctx, initializer=ki._kw_init, initargs=initargs)
+                try:
+                    ergebnisse = ex.submit(ki._kw_job, stapel).result()
+                except BrokenProcessPool:  # ein Foto hat den Prozess abgeschossen
+                    ex.shutdown(wait=False, cancel_futures=True)
+                    ex = self._ex = None
+                    if self._stopp:
+                        return
+                    ergebnisse = self._ki_einzeln(stapel, ctx, initargs)
+                self._ki_schreiben(ergebnisse)
+                self.status["fertig"] += len(stapel)
+        except Exception:
+            if self._stopp:
+                return
+            raise
+        finally:
+            if ex is not None:
+                ex.shutdown(wait=not self._stopp, cancel_futures=True)
+            self._ex = None

@@ -72,10 +72,13 @@ Fotos verschieben (Ordnerseite, Knopf „Fotos verschieben …“):
   Ordnernummer) oder Nummer eines vorhandenen Ordners + „In diesen Ordner“. NEF, Begleitdateien, Fassungen, Sterne,
   Alben, Jahr und Gesichter wandern mit; „Rückgängig“ in der Meldung, ein leerer Ordner verschwindet.
 Ähnliche Fotos (Lupe, Knopf „≈ Ähnliche“):
-  Die ähnlichsten Fotos im ganzen Archiv, nach Ähnlichkeit sortiert; fotosort.py rechnet wie beim Import. Abstand =
-  verschiedene Bits von pHash und dHash: 0 = gleich, um 60 = ganz verschieden, bis SCHWELLE kämen die Fotos beim
-  Import in eine Gruppe. Höchstens AEHNLICH_ANZAHL (150) Fotos bis Abstand AEHNLICH_BIS (48). „Fotos verschieben …“
-  bringt gewählte Fotos in den Ordner des Ausgangsfotos, in eine neue Gruppe oder einen anderen Ordner.
+  Die ähnlichsten Fotos im ganzen Archiv, nach Ähnlichkeit sortiert. Verglichen wird der Bildinhalt mit dem KI-Modell
+  CLIP: Der Index berechnet je Foto einmal Merkmale (auf der CPU, mit ONNX Runtime oder OpenCV ab 5). Das Modell,
+  rund 350 MB, lädt bestof.py beim ersten Mal von Hugging Face; die Fotos bleiben auf dem Rechner. Ähnlichkeit in
+  Prozent: ab 95 fast gleich, ab 88 sehr ähnlich, ab 80 ähnlich, darunter bis AEHNLICH_MIN entfernt ähnlich; höchstens
+  AEHNLICH_ANZAHL Fotos. Ohne KI (KI = 0, INDEX = 0, Modell nicht ladbar) nur fast gleiche Fotos per Bildvergleich wie
+  beim Import (pHash+dHash). „Fotos verschieben …“ bringt gewählte Fotos in den Ordner des Ausgangsfotos, in eine
+  neue Gruppe oder einen anderen Ordner.
 Einstellungen (Seite „Einstellungen“):
   Ähnlichkeit beim Import, Workflows (Vorwahl, eigener fürs Kolorieren, hochladen), Kolorieren, Anzeige,
   Personen, Import – geschrieben in bestof.conf, gültig sofort. „Neu gruppieren“ gruppiert dort das ganze Archiv
@@ -134,6 +137,9 @@ Umgebungsvariablen (Standard in Klammern):
   BROWSER    (1)           Browser beim Start öffnen
   INDEX      (1)           0 = kein Index (keine Metadaten, Orte, Personen, Filter)
   GESICHTER  (1)           0 = keine Gesichtserkennung
+  KI         (1)           0 = keine KI-Suche für „Ähnliche Fotos“ (dann nur fast gleiche Fotos per Bildvergleich)
+  AEHNLICH_MIN (72)        „Ähnliche Fotos“: ab so viel Prozent Ähnlichkeit zeigen
+  AEHNLICH_ANZAHL (150)    „Ähnliche Fotos“: höchstens so viele
   INDEX_JOBS (Kerne/2)     parallele Prozesse für den Index
   GPU        (auto)        Gesichtserkennung auf der GPU, wenn eine nutzbar ist (Pakete je Hersteller: README, GPU);
                            0 = nur CPU; cuda | rocm | directml | coreml | openvino | opencv-cuda | opencl = nur dieses
@@ -289,6 +295,10 @@ def main(skript_ordner=None):
     app.pro_seite = max(12, _env("PRO_SEITE", 120, int))
     app.passwort = _env("PASSWORT", "")
     app.gesichter = _env("GESICHTER", "1") != "0"
+    app.ki = _env("KI", "1") != "0"  # KI-Suche „Ähnliche Fotos“ (CLIP)
+    app.ki_beim_start = app.ki  # die Seite „Einstellungen“ ändert app.ki, wirksam erst nach dem Neustart
+    app.aehnlich_min = min(99, max(0, _env("AEHNLICH_MIN", 72, int)))
+    app.aehnlich_anzahl = min(1000, max(1, _env("AEHNLICH_ANZAHL", 150, int)))
     app.index_jobs = max(1, _env("INDEX_JOBS", max(1, (os.cpu_count() or 2) // 2), int))
     app.gpu = _env("GPU", "auto")
     app.gpu_jobs = max(0, _env("GPU_JOBS", 2, int))

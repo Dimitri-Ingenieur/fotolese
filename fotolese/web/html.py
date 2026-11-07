@@ -1061,6 +1061,8 @@ def status_text(app):
     if s["phase"] == "Index" and s["gesamt"]:
         return (f"Index: {s['fertig']} von {s['gesamt']} Bildern gelesen – Filter noch unvollständig."
                 + (f" {rechenwerk}." if rechenwerk else "")), True
+    if s["phase"] == "KI" and s["gesamt"]:
+        return f"KI-Suche: {s['fertig']} von {s['gesamt']} Bildern gelesen – „Ähnliche Fotos“ noch unvollständig.", True
     if s["phase"] not in ("fertig", "Index"):
         return f"Index: {s['phase']} …", True
     zahlen = app.index.einer("SELECT (SELECT COUNT(*) FROM bild), (SELECT COUNT(*) FROM gesicht)")

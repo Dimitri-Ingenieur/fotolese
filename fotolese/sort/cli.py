@@ -27,7 +27,7 @@ Aufruf (Conda):
   MODUS=undo python fotosort.py AUSGABE/fotosort_<zeit>.csv
   MODUS=gruppen python fotosort.py AUSGABE           # Plan: ganzes Archiv neu gruppieren
   MODUS=analyse python fotosort.py AUSGABE 0004 0005 # welche Werte hätten diese Ordner zusammengebracht?
-  MODUS=aehnlich python fotosort.py AUSGABE 0004/IMG_0001.JPG   # die ähnlichsten Fotos im Archiv
+  MODUS=aehnlich python fotosort.py AUSGABE 0004/IMG_0001.JPG   # fast gleiche Fotos im Archiv
 
 Nachträglich gruppieren (beide Modi planen nur, verschoben wird nichts):
   gruppen  gruppiert alle Bilder direkt in AUSGABE/0000–99999 mit den Werten unten, als kämen sie in einem Import.
@@ -38,9 +38,10 @@ Nachträglich gruppieren (beide Modi planen nur, verschoben wird nichts):
   analyse  nennt je Wert (SCHWELLE, SERIE_SEK, SERIE_SCHWELLE) den kleinsten, mit dem fotosort die Bilder der
            Ordner beim Import in eine Gruppe gelegt hätte, und was der Wert sonst im Archiv zusammenlegen würde.
 
-  aehnlich nennt die Fotos im Archiv, die BILD am ähnlichsten sind, nach pHash+dHash-Abstand sortiert (0 = gleich),
-           höchstens AEHNLICH_ANZAHL (150) bis zum Abstand AEHNLICH_BIS (48). BILD darf auch eine Fassung im Unterordner
-           „verbessert“ sein. Verglichen wird mit den Bildern direkt in den Ordnern; bestof.py zeigt sie an.
+  aehnlich nennt die Fotos im Archiv, die BILD fast gleichen, nach pHash+dHash-Abstand sortiert (0 = gleich): höchstens
+           AEHNLICH_ANZAHL (150) bis zum Abstand AEHNLICH_BIS (24) – darüber sind Treffer Zufall. BILD darf auch eine
+           Fassung im Unterordner „verbessert“ sein. Verglichen wird mit den Bildern direkt in den Ordnern. Ähnliche
+           Motive findet bestof.py mit KI (Lupe, „≈ Ähnliche“); diesen Modus nimmt es nur, wenn die KI aus ist.
 
 Umgebungsvariablen (Standard in Klammern):
   MODUS           (move)   move | copy | link | test | undo | gruppen | analyse | aehnlich
