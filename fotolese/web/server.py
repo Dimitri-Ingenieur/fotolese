@@ -27,6 +27,7 @@ from fotolese.web.html import (alben_seite, bild_daten, gruppe_pruefen_seite, im
                                ordner_zusammen, personen_seite, status_text, such_seite, uebersicht)
 from fotolese.web.importieren import import_api, import_seite, ordner_liste, papierkorb_inhalt
 from fotolese.web.papierkorb import papierkorb_api
+from fotolese.web.bearbeiten import bearbeiten_api
 from fotolese.web.gruppieren import gruppieren_api, gruppieren_stand
 from fotolese.web.einstellungen import MAX_WORKFLOW, einstellungen_api, einstellungen_seite, workflow_hochladen
 
@@ -281,6 +282,8 @@ class Handler(BaseHTTPRequestHandler):
                                                         str(daten.get("art") or "verbessern"), daten.get("farbhinweise")))
         if pfad == "/api/papierkorb":
             return self._json(*papierkorb_api(app, daten))
+        if pfad == "/api/bearbeiten":
+            return self._json(*bearbeiten_api(app, daten))
         if pfad == "/api/gruppieren":
             return self._json(*gruppieren_api(app, daten))
         if pfad == "/api/einstellungen":

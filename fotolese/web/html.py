@@ -181,7 +181,18 @@ kbd{font-family:var(--zahl);border:1px solid var(--linie);padding:0 5px;border-r
 .meldung .mknopf{margin-left:12px;color:inherit;font-weight:600;font-size:inherit}
 .lupe:not([hidden]) ~ .meldung{bottom:96px}
 /* Verbessern (ComfyUI) und Vorher/Nachher */
-.lupe .flaeche .nachher{position:absolute;max-width:none;max-height:none;object-fit:fill;pointer-events:none;outline:none}
+.lupe .flaeche .nachher{position:absolute;max-width:none;max-height:none;object-fit:contain;pointer-events:none;
+  outline:none}
+/* Bearbeiten: eigene Leiste statt der normalen, Vorschau per CSS am Lupenbild */
+.lupe .bearbeitung{display:flex;align-items:center;gap:10px 14px;padding:10px 16px 14px;flex-wrap:wrap;
+  border-top:1px solid var(--linie)}
+.bearbeitung .btitel{font-weight:600}
+.bearbeitung .knopf.dreh{font-size:18px;line-height:1;padding:5px 10px}
+.bearbeitung label{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--leise)}
+.bearbeitung input[type=range]{width:7.5em;accent-color:var(--stift)}
+.bearbeitung output{min-width:2.4em;font-variant-numeric:tabular-nums;color:var(--text)}
+.bearbeitung .speichern{border-color:var(--stift);color:var(--stift)}.bearbeitung .speichern:disabled{opacity:.45}
+.lupe.bearbeiten .flaeche img{outline:none}
 .trenner{position:absolute;width:2px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.45);pointer-events:none}
 .trenner::after{content:"⇆";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:30px;height:30px;
   border-radius:50%;background:#fff;color:#222;display:flex;align-items:center;justify-content:center;font-size:16px;
@@ -597,12 +608,12 @@ function lupeZeichne(){const b=D.bilder[aktiv],l=D.auswahl[b.ordner]||[],an=l.in
  lupeKarte.hidden=!b.k;if(b.k)lupeKarte.href=b.k;
  gzKnopf.hidden=!D.gesichter;gzKnopf.textContent='Gesichter'+(b.f.length?' ('+b.f.length+')':'');
  sternKnopf(lupeKnopf,b,an,voll);lupeKnopf.title+=' (Leertaste oder S)';kaesten();albenLupe();verbLupe();}
-function oeffne(i,schritt){const j=sichtbar(i,schritt||1);if(j<0){schliesse();return;}
+function oeffne(i,schritt){bearbeitenAus();const j=sichtbar(i,schritt||1);if(j<0){schliesse();return;}
  vergleichZu(false);nbox.hidden=true;nGesicht=null;aktiv=j;const b=D.bilder[aktiv];
  lupeImg.src=b.g;lupeImg.alt=b.name;lupeOrig.href=b.o;lupe.hidden=false;lupeZeichne();if(gesichterAn)gesichterHolen(aktiv);
  vorladen(aktiv+1);vorladen(aktiv-1);lupe.querySelector('.zu').focus({preventScroll:true});}
 function schliesse(){if(aktiv<0)return;vergleichZu(false);nbox.hidden=true;nGesicht=null;const f=felder[aktiv];aktiv=-1;
- lupe.hidden=true;
+ bearbeitenAus();lupe.hidden=true;
  lupeImg.removeAttribute('src');
  kaesten();f.querySelector('.rahmen').focus({preventScroll:true});f.scrollIntoView({block:'nearest'});}
 lupeImg.addEventListener('load',kaesten);window.addEventListener('resize',kaesten);
@@ -615,13 +626,16 @@ gzKnopf.addEventListener('click',gesichterUmschalten);
 lupeKnopf.addEventListener('click',()=>umschalten(aktiv));
 lupe.querySelector('.korb').addEventListener('click',()=>wegwerfen(aktiv));
 let wischX=null;lupe.addEventListener('touchstart',ev=>{wischX=ev.touches[0].clientX;},{passive:true});
-lupe.addEventListener('touchend',ev=>{if(wischX===null||vergleich){wischX=null;return;}  // im Vergleich: Ziehen = Schieber
+// im Vergleich ist Ziehen der Schieber, beim Bearbeiten wird nicht geblättert
+lupe.addEventListener('touchend',ev=>{if(wischX===null||vergleich||bearbeitet){wischX=null;return;}
  const dx=ev.changedTouches[0].clientX-wischX;wischX=null;
  if(Math.abs(dx)>60)oeffne(aktiv+(dx<0?1:-1),dx<0?1:-1);});
 document.addEventListener('keydown',ev=>{
+ if(bearbeitet&&ev.key==='Escape'){bTaste(ev);return;}  // auch aus einem Regler heraus
  if(ev.altKey||ev.ctrlKey||ev.metaKey||ev.target.matches('input,select'))return;
  if(albenOffen()){if(ev.key==='Escape'){albenZu();ev.preventDefault();}return;}
  if(aktiv>=0){
+  if(bearbeitet){bTaste(ev);return;}
   if(!nbox.hidden&&ev.key==='Escape'){nennenZu();ev.preventDefault();}
   else if(ev.key==='ArrowRight'){oeffne(aktiv+1);ev.preventDefault();}
   else if(ev.key==='ArrowLeft'){oeffne(aktiv-1,-1);ev.preventDefault();}
@@ -631,6 +645,7 @@ document.addEventListener('keydown',ev=>{
   else if(ev.key==='v'||ev.key==='V'){vergleichAn(!vergleich);ev.preventDefault();}
   else if((ev.key==='j'||ev.key==='J')&&lupeJahr){lupeJahr.focus();lupeJahr.select();ev.preventDefault();}
   else if(ev.key==='a'||ev.key==='A'){albumTaste();ev.preventDefault();}
+  else if(ev.key==='e'||ev.key==='E'){bearbeitenAn();ev.preventDefault();}
   else if(ev.key==='Escape'){schliesse();}
  }else if(D.einordner){
   if(ev.key==='ArrowRight'&&D.weiter)location.href=D.weiter;
@@ -904,7 +919,7 @@ function vFertig(k){const {i,s}=vJobs[k],b=D.bilder[i],farb=s.art==='kolorieren'
  b.ng=s.ergebnis.g;b.paar=[b.g,s.ergebnis.g];  // Vergleich: dieses Foto <-> Ergebnis
  meldung((farb?'Koloriert: ':'Verbessert: ')+s.ergebnis.name+' – im Ordner direkt hinter dem Foto.',false,
   ['Ordner neu laden',()=>location.reload()]);
- if(aktiv===i)vergleichAn(true);}
+ if(aktiv===i&&!bearbeitet)vergleichAn(true);}
 function vergleichAn(an){const b=aktiv>=0?D.bilder[aktiv]:null,p=an&&b?vPaar(b):null;
  if(!p){vergleichZu(true);return;}
  vergleich=true;gesichterAn=false;nbox.hidden=true;lupe.classList.add('vergleich-an');
@@ -933,6 +948,57 @@ verbKnopf.addEventListener('click',()=>verbessern('verbessern'));farbKnopf.addEv
 farbHinweis.addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();
  verbessern(farbWf()?'kolorieren':'verbessern');}});
 vglKnopf.addEventListener('click',()=>vergleichAn(!vergleich));
+"""
+
+JS_BEARBEITEN = """
+// Bearbeiten: drehen, spiegeln, Helligkeit, Kontrast, Sättigung – Vorschau per CSS, Speichern legt eine neue Fassung an
+// im Modus {i, drehung, spiegeln, helligkeit, kontrast, saettigung}; var, weil andere Teile schon früher fragen
+var bearbeitet=null;
+const bLeiste=lupe.querySelector('.bearbeitung'),bSpeichern=bLeiste.querySelector('.speichern'),
+ bRegler=[...bLeiste.querySelectorAll('input[type=range]')],REGLER=['helligkeit','kontrast','saettigung'],
+ FILTER=['brightness','contrast','saturate'];  // dieselben Formeln rechnet bearbeiten.py
+function bGeaendert(){const z=bearbeitet;return !!z&&(z.drehung!==0||z.spiegeln||REGLER.some(k=>z[k]!==0));}
+function bVorschau(){const z=bearbeitet;if(!z)return;
+ const w=lupeImg.offsetWidth,h=lupeImg.offsetHeight,quer=z.drehung%180!==0;  // 90°/270°: gedreht einpassen
+ const s=quer&&w&&h?Math.min((flaeche.clientWidth-24)/h,(flaeche.clientHeight-24)/w):1;
+ lupeImg.style.transform='scale('+s+')'+(z.spiegeln?' scaleX(-1)':'')+' rotate('+z.drehung+'deg)';
+ lupeImg.style.filter=REGLER.map((k,n)=>FILTER[n]+'('+(1+z[k]/100)+')').join(' ');
+ bRegler.forEach(e=>{const v=z[e.dataset.regler];e.value=v;e.nextElementSibling.textContent=(v>0?'+':'')+v;});
+ bSpeichern.disabled=!bGeaendert();}
+function bearbeitenAn(){if(aktiv<0||bearbeitet)return;vergleichZu(true);nennenZu();if(gesichterAn)gesichterUmschalten();
+ bearbeitet={i:aktiv,drehung:0,spiegeln:false,helligkeit:0,kontrast:0,saettigung:0};
+ lupe.classList.add('bearbeiten');lupe.querySelector('.leiste').hidden=true;bLeiste.hidden=false;bVorschau();}
+function bearbeitenAus(){if(!bearbeitet)return;bearbeitet=null;lupe.classList.remove('bearbeiten');
+ lupeImg.style.transform=lupeImg.style.filter='';bLeiste.hidden=true;lupe.querySelector('.leiste').hidden=false;
+ if(aktiv>=0)lupeZeichne();}
+function bSchritt(art){const z=bearbeitet;if(!z)return;
+ if(art==='spiegeln')z.spiegeln=!z.spiegeln;  // gespiegelt dreht „rechts“ andersherum – so, wie man es sieht
+ else z.drehung=(z.drehung+((art==='rechts')!==z.spiegeln?90:270))%360;
+ bVorschau();}
+function bTaste(ev){const k=ev.key;
+ if(k==='Escape'){if(!bGeaendert()||confirm('Änderungen verwerfen?'))bearbeitenAus();}
+ else if(k==='r'||k==='R')bSchritt(ev.shiftKey?'links':'rechts');
+ else if(k==='h'||k==='H')bSchritt('spiegeln');
+ else if(k!==' ')return;  // Leertaste (sonst Stern) löst keinen Knopf aus, der gerade den Fokus hat
+ ev.preventDefault();}
+async function bSpeichernKlick(){const z=bearbeitet;if(!z||!bGeaendert())return;const i=z.i,b=D.bilder[i];
+ bSpeichern.disabled=true;bSpeichern.textContent='Speichern …';
+ const daten={pfad:b.ordner+'/'+b.id,drehung:z.drehung,spiegeln:z.spiegeln};REGLER.forEach(k=>{daten[k]=z[k];});
+ const [ok,j]=await post('/api/bearbeiten',daten);bSpeichern.textContent='Speichern';
+ if(!ok){bSpeichern.disabled=false;meldung(j.fehler||'Speichern fehlgeschlagen.',true);return;}
+ bearbeitenAus();b.ng=j.ergebnis.g;b.paar=[b.g,j.ergebnis.g];  // Vergleich wie nach dem Verbessern
+ meldung(j.meldung,false,['Ordner neu laden',()=>location.reload()]);
+ if(aktiv===i&&z.drehung%180===0)vergleichAn(true);}  // um 90° gedreht: anderes Seitenverhältnis, kein Schieber
+lupe.querySelector('.bearb').addEventListener('click',bearbeitenAn);
+bLeiste.querySelectorAll('.dreh').forEach(k=>k.addEventListener('click',()=>bSchritt(k.dataset.schritt)));
+bRegler.forEach(e=>{
+ e.addEventListener('input',()=>{if(bearbeitet){bearbeitet[e.dataset.regler]=+e.value;bVorschau();}});
+ e.addEventListener('dblclick',()=>{if(bearbeitet){bearbeitet[e.dataset.regler]=0;bVorschau();}});});
+bLeiste.querySelector('.zuruecksetzen').addEventListener('click',()=>{if(!bearbeitet)return;
+ Object.assign(bearbeitet,{drehung:0,spiegeln:false,helligkeit:0,kontrast:0,saettigung:0});bVorschau();});
+bLeiste.querySelector('.abbrechen').addEventListener('click',bearbeitenAus);
+bSpeichern.addEventListener('click',bSpeichernKlick);
+window.addEventListener('resize',bVorschau);lupeImg.addEventListener('load',bVorschau);
 """
 
 
@@ -1135,7 +1201,8 @@ def bogen_html(app, eintraege, einordner):
             f'<svg class="fettstift" viewBox="0 0 100 100" aria-hidden="true">'
             f'<path pathLength="100" d="{stift_pfad(f"{o}{name}")}"/></svg>'
             f'<span class="buchstabe" aria-hidden="true"></span>{nr}'
-            + (f'<span class="vbadge" title="Mit ComfyUI verbessert">✦ {e(wf)}</span>' if wf else "") + '</div>'
+            + (f'<span class="vbadge" title="Fassung im Unterordner verbessert">✦ {e(wf)}</span>' if wf else "")
+            + '</div>'
             f'<figcaption><span class="lfd">{i + 1}</span><span class="dateiname" title="{e(name)}">'
             f'{e(os.path.basename(name))}</span>'
             f'{STERN_KNOPF}{korb_knopf()}<button class="knopf holen" type="button" title="Aus dem Papierkorb '
@@ -1153,6 +1220,22 @@ def bogen_html(app, eintraege, einordner):
                       **{k: v for k, v in (("vg", vg), ("ng", ng), ("wf", wf)) if v}})
     return "".join(felder), daten
 
+
+BEARBEITUNG_HTML = (
+    '<div class="bearbeitung" hidden><span class="btitel">Bearbeiten</span>'
+    '<button class="knopf dreh" type="button" data-schritt="links" aria-label="90° nach links drehen" '
+    'title="90° nach links drehen (Umschalt+R)">↺</button>'
+    '<button class="knopf dreh" type="button" data-schritt="rechts" aria-label="90° nach rechts drehen" '
+    'title="90° nach rechts drehen (Taste R)">↻</button>'
+    '<button class="knopf dreh" type="button" data-schritt="spiegeln" aria-label="Waagerecht spiegeln" '
+    'title="Waagerecht spiegeln (Taste H)">⇋</button>'
+    + "".join(f'<label>{text}<input type="range" min="-100" max="100" step="1" value="0" data-regler="{k}" '
+              f'title="Doppelklick = zurück auf 0"><output>0</output></label>'
+              for k, text in (("helligkeit", "Helligkeit"), ("kontrast", "Kontrast"), ("saettigung", "Sättigung")))
+    + '<button class="knopf zuruecksetzen" type="button">Zurücksetzen</button>'
+    '<button class="knopf abbrechen" type="button" title="Ohne Speichern zurück (Esc)">Abbrechen</button>'
+    '<button class="knopf speichern" type="button" title="Neue Fassung …_bearbeitet.png im Unterordner verbessert '
+    'anlegen – das Foto bleibt unverändert">Speichern</button></div>')
 
 LUPE_HTML = ('<div class="lupe" hidden role="dialog" aria-label="Lupe"><div class="flaeche"><img alt="">'
              '<img class="nachher" alt="" hidden><div class="trenner" hidden></div>'
@@ -1175,6 +1258,8 @@ LUPE_HTML = ('<div class="lupe" hidden role="dialog" aria-label="Lupe"><div clas
              '<button class="knopf zurueck" type="button" aria-label="Voriges Bild">‹</button>'
              '<button class="knopf vor" type="button" aria-label="Nächstes Bild">›</button>'
              + STERN_KNOPF + korb_knopf(" – Taste Entf") +
+             '<button class="knopf bearb" type="button" title="Drehen, spiegeln, Helligkeit, Kontrast, Sättigung – '
+             'gespeichert wird eine neue Fassung, das Foto bleibt (Taste E)">✎ Bearbeiten</button>'
              '<select class="wfwahl" aria-label="Workflow zum Verbessern" hidden></select>'
              '<button class="knopf verb" type="button" hidden title="Dieses Foto mit dem gewählten Workflow verbessern – '
              'das Ergebnis kommt in den Unterordner verbessert, das Foto bleibt">✦ Verbessern</button>'
@@ -1191,7 +1276,7 @@ LUPE_HTML = ('<div class="lupe" hidden role="dialog" aria-label="Lupe"><div clas
              '<button class="knopf gz" type="button" title="Taste G">Gesichter</button>'
              '<a class="knopf karte" target="_blank" rel="noopener noreferrer">Karte</a>'
              '<a class="knopf orig" target="_blank" rel="noopener">Original</a>'
-             '<button class="knopf zu" type="button">Schließen</button></div></div>')
+             '<button class="knopf zu" type="button">Schließen</button></div>' + BEARBEITUNG_HTML + '</div>')
 
 # Leiste über dem Bogen: Fotos für ein Album markieren und Jahr per Klick setzen
 ALBUMLEISTE = ('<div class="albumleiste" id="albumleiste"><select id="aktalbum" aria-label="Album zum Markieren"></select>'
@@ -1320,7 +1405,7 @@ def ordner_seite(app, ordner):
           "verbessern": app.verbesserer.fuer_seite() if app.verbesserer else [], "kolorieren": farb_daten(app),
           "vorwahl": app.verbesserer.vorwahl if app.verbesserer else ""}
     inhalt += f'<script type="application/json" id="daten">{json_im_html(js)}</script>'
-    return seite(f"{ordner} – BestOf", inhalt, JS_BOGEN + JS_ALBEN + JS_VERBESSERN + JS_VERSCHIEBEN)
+    return seite(f"{ordner} – BestOf", inhalt, JS_BOGEN + JS_ALBEN + JS_VERBESSERN + JS_BEARBEITEN + JS_VERSCHIEBEN)
 
 
 def such_seite(app, text, seite_nr):
@@ -1367,7 +1452,7 @@ def such_seite(app, text, seite_nr):
           "verbessern": app.verbesserer.fuer_seite() if app.verbesserer else [], "kolorieren": farb_daten(app),
           "vorwahl": app.verbesserer.vorwahl if app.verbesserer else ""}
     inhalt += f'<script type="application/json" id="daten">{json_im_html(js)}</script>'
-    return seite(f"{text} – BestOf", inhalt, JS_BOGEN + JS_ALBEN + JS_VERBESSERN)
+    return seite(f"{text} – BestOf", inhalt, JS_BOGEN + JS_ALBEN + JS_VERBESSERN + JS_BEARBEITEN)
 
 
 def personen_gruppen(index, mindest, ignorierte):

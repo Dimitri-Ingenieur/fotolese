@@ -46,6 +46,10 @@ Papierkorb (Eimer unter jedem Foto, in der Lupe Taste Entf):
   Das Foto wandert samt NEF und Begleitdateien (.xmp, .pp3) nach SORTIERT/Musor/<Ordner>/, Musor/liste.csv
   vermerkt die Herkunft. „Rückgängig“ bzw. „Zurückholen“ legt es zurück. Fotos mit Stern bleiben (erst den
   Stern entfernen). Endgültig löschen geht über die Weboberfläche nie – den Papierkorb leert man im Dateimanager.
+Bearbeiten (Lupe, Knopf „✎ Bearbeiten“ oder Taste E):
+  Drehen um 90° (R, Umschalt+R = links), waagerecht spiegeln (H), Helligkeit, Kontrast, Sättigung – mit Vorschau.
+  „Speichern“ legt eine neue Fassung SORTIERT/<Ordner>/verbessert/<Name>_bearbeitet.png an (wie beim Verbessern,
+  mit Datum, Ort, Jahr und Alben des Fotos); das Foto bleibt unverändert. Esc oder „Abbrechen“ verwirft.
 Verbessern (ComfyUI, z. B. auf demselben Rechner, Port 8188):
   In der Lupe Workflow wählen und „✦ Verbessern“: bestof lädt das Foto zu ComfyUI, wartet und legt das Ergebnis
   verlustfrei als SORTIERT/<Ordner>/verbessert/<Name>_<Workflow>.png ab – mit Datum und Ort des Originals, das
@@ -107,6 +111,7 @@ Aufruf (Conda-Umgebung von fotosort.py):
 Tasten im Ordner:  ← / →  voriger / nächster Ordner,  N  nächster Ordner ohne Stern
 Tasten in der Lupe: ← / →  Bild,  Leertaste / S  Stern,  Entf  Papierkorb,  G  Gesichter zeigen,  J  Jahr ändern,
                     V  Vorher/Nachher (verbesserte oder kolorierte Fassung),  Esc  schließen,
+                    E  Bearbeiten (darin R / Umschalt+R drehen, H spiegeln, Esc abbrechen),
                     A  Album: ins gewählte Album aufnehmen/herausnehmen, sonst Alben zuordnen
                     (Namensschild anklicken = benennen: ganze Gruppe oder nur dieses Gesicht;
                      Gesicht fehlt = bei eingeblendeten Gesichtern ins Gesicht klicken)

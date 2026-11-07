@@ -12,6 +12,7 @@ Prompt-Texts (derselbe, den das Kolorieren ersetzt); hat der Workflow keinen, bl
 Kolorieren ist ein eigener Auftrag (kolorieren.py): Er färbt das gezeigte Foto ein – Original oder verbesserte
 Fassung – und legt das Ergebnis nach dem Luma-Lock als <Name>_koloriert.png daneben.
 """
+import contextlib
 import copy
 import errno
 import io
@@ -224,13 +225,14 @@ def _ausfuehrungsfehler(status):
 
 def speichern(app, ordner, name, roh, workflow, stamm=None, notiz=None, text_von=None):
     """Ergebnis als ordner/verbessert/<Name>_<Workflow>[_n].png (oder <stamm>[_n].png); nie überschreiben.
-    EXIF und Alben kommen vom Original name; text_von: PNG, dessen ComfyUI-Texte mitkommen. Rückgabe: neuer Name."""
+    roh: PNG-Daten oder ein PIL-Bild (Bearbeiten, dann workflow None). EXIF und Alben kommen vom Original name,
+    Texte und Farbprofil vom Ergebnis; text_von: PNG, dessen ComfyUI-Texte mitkommen. Rückgabe: neuer Name."""
     quelle = os.path.join(app.archiv.pfad, ordner, name)
     ziel = os.path.join(app.archiv.pfad, ordner, VERBESSERT)
     os.makedirs(ziel, exist_ok=True)
     stamm = stamm or f"{os.path.splitext(os.path.basename(name))[0]}_{workflow['kurz']}"
     exif = _exif_ohne_drehung(quelle)
-    with Image.open(io.BytesIO(roh)) as im:
+    with contextlib.nullcontext(roh) if isinstance(roh, Image.Image) else Image.open(io.BytesIO(roh)) as im:
         im.load()
         texte = im.info
         if text_von:
@@ -238,10 +240,13 @@ def speichern(app, ordner, name, roh, workflow, stamm=None, notiz=None, text_von
                 texte = t.info
         info = PngImagePlugin.PngInfo()
         for k, v in texte.items():  # ComfyUI: „prompt“ und „workflow“ – das PNG lässt sich in ComfyUI wieder öffnen
-            if isinstance(v, str):
+            if isinstance(v, str) and k != "fotolese":
                 info.add_text(k, v)
-        info.add_text("fotolese", json.dumps({"original": anzeige(name), "workflow": workflow["datei"], **(notiz or {})},
-                                             ensure_ascii=False))
+        vermerk = {"original": anzeige(name), **({"workflow": workflow["datei"]} if workflow else {}), **(notiz or {})}
+        info.add_text("fotolese", json.dumps(vermerk, ensure_ascii=False))
+        extra = {"exif": exif} if exif else {}
+        if im.info.get("icc_profile"):
+            extra["icc_profile"] = im.info["icc_profile"]
         with _SPEICHERN:
             for k in range(1, 10000):
                 datei = f"{stamm}{'' if k == 1 else f'_{k}'}.png"
@@ -250,7 +255,7 @@ def speichern(app, ordner, name, roh, workflow, stamm=None, notiz=None, text_von
             else:
                 raise Fehler("Kein freier Dateiname im Ordner verbessert.")
             tmp = os.path.join(ziel, f".{datei}.tmp")
-            im.save(tmp, "PNG", pnginfo=info, **({"exif": exif} if exif else {}))
+            im.save(tmp, "PNG", pnginfo=info, **extra)
             if os.path.lexists(os.path.join(ziel, datei)):
                 os.unlink(tmp)
                 raise OSError(errno.EEXIST, "Datei existiert schon", datei)

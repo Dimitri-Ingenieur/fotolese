@@ -33,6 +33,8 @@ auch selbst aufrufen – dann müssen Sie fotosort.py nicht von Hand starten.
   nur im Dateimanager ([mehr](#papierkorb))
 - im Heimnetz erreichbar, z. B. `http://tigris:8765` vom Tablet; importieren nur am Rechner selbst
   ([mehr](#im-heimnetz))
+- Bearbeiten in der Lupe: drehen, spiegeln, Helligkeit, Kontrast, Sättigung – gespeichert als neue Fassung
+  `…_bearbeitet.png`, das Foto bleibt ([mehr](#bearbeiten))
 - Verbessern und Kolorieren mit ComfyUI, zwei eigene Knöpfe in der Lupe: Fassungen kommen in den Unterordner
   `verbessert`, Vorher/Nachher-Schieber; koloriert wird das Original direkt oder eine verbesserte Fassung
   ([mehr](#verbessern-mit-comfyui))
@@ -226,6 +228,19 @@ Ordner zusammenfassen, Fotos verschieben, Einstellungen. Importieren geht nur an
 bestof.py erkennt das an der Absenderadresse, nicht an einem Passwort. Wer im Heimnetz nicht jedem die
 Fotos zeigen will, setzt in `bestof.conf` ein `PASSWORT` (der Benutzername ist beliebig). `HOST = 127.0.0.1`
 macht bestof.py wieder nur am eigenen Rechner erreichbar, etwa auf einem Laptop in fremden Netzen.
+
+### Bearbeiten
+
+In der Lupe öffnet **✎ Bearbeiten** (Taste <kbd>E</kbd>) eine eigene Leiste: ↺ und ↻ drehen um 90° (Tasten
+<kbd>Umschalt</kbd>+<kbd>R</kbd> und <kbd>R</kbd>), ⇋ spiegelt waagerecht (<kbd>H</kbd>), dazu Regler für
+Helligkeit, Kontrast und Sättigung (Doppelklick setzt einen Regler auf 0). Die Lupe zeigt jede Änderung sofort.
+
+„Speichern“ legt eine neue Fassung an, wie beim Verbessern: `Sortiert/<Ordner>/verbessert/<Name>_bearbeitet.png`,
+weitere als `…_bearbeitet_2.png`. Das Foto selbst bleibt unverändert. Die Fassung bekommt Datum, Ort, Jahr und
+Alben des Fotos und steht nach dem Neuladen als Kachel „✦ bearbeitet“ direkt dahinter; ohne Drehung zeigt
+gleich danach der Schieber Vorher/Nachher. Bearbeiten lässt sich jedes Foto, auch eine Fassung aus ComfyUI –
+deren Workflow bleibt im PNG. „Abbrechen“ oder <kbd>Esc</kbd> verwirft die Änderungen; solange die Leiste offen
+ist, blättern die Pfeiltasten nicht und Stern und Papierkorb ruhen.
 
 ### Verbessern mit ComfyUI
 
@@ -460,6 +475,7 @@ fotolese/                    Projektordner
 │       ├── auswahl.py       Sterne je Ordner, Kopien in BestOf
 │       ├── papierkorb.py    Fotos nach Musor schieben und zurückholen, nie löschen
 │       ├── verbessern.py    Fotos mit ComfyUI verbessern, Fassung in <Ordner>/verbessert
+│       ├── bearbeiten.py    Bearbeiten in der Lupe: drehen, spiegeln, Farben; Fassung …_bearbeitet.png
 │       ├── kolorieren.py    Kolorieren: Prompt-Erkennung, Luma-Lock mit ffmpeg
 │       ├── alben.py         Alben: anlegen, Fotos zuordnen, für Filter und Oberfläche
 │       ├── index.py         SQLite-Index und Hintergrund-Indexer
