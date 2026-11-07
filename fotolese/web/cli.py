@@ -61,7 +61,8 @@ Verbessern (ComfyUI, z. B. auf demselben Rechner, Port 8188):
   Unterordner verbessert; Helligkeit und Details aus dem Foto (Luma-Lock), nur die Farbe von ComfyUI. Workflow:
   FARBE_WORKFLOW, sonst der in der Lupe gewählte, wenn er einen Prompt-Text hat. Die Farbhinweise gelten auch
   beim Verbessern: Sie kommen ans Ende des Prompt-Texts des Workflows („Color hints: …“), falls er einen hat.
-Ordner zusammenfassen (Übersicht, Knopf „Ordner zusammenfassen“):
+Ordner zusammenfassen (Übersicht, Knopf „Ordner zusammenfassen“; in der Gruppenansicht eines Albums oder Filters
+  „Gruppen zusammenfassen“ – danach wieder das Album):
   Ordner anklicken (Umschalt = Bereich), „Zusammenfassen …“: alle Fotos kommen in den Zielordner (vorgewählt die
   kleinste Nummer: 0004, 0005, 0006 -> 0004), samt NEF, Begleitdateien und verbesserten Fassungen; gleiche Namen
   bekommen einen Laufindex. Sterne, Alben, Jahr und Gesichter wandern mit; „Rückgängig“ in der Meldung. Der Dialog

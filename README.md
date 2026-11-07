@@ -183,7 +183,9 @@ Vorschau ist das Foto mit Stern; hat die Gruppe im Album keins, das zuletzt geä
 verbesserte oder bearbeitete Fassung. Ein Klick auf die Kachel zeigt die Fotos der Gruppe einzeln (der Filter
 bekommt die Ordnernummer dazu, z. B. `Urlaub 2023, 0012`), mit Lupe, Stern und allem. „Gruppen | Einzeln“ über
 den Kacheln schaltet um; „Einzeln“ zeigt alle Fotos des Albums wie bisher, z. B. zum Markieren mit ＋. Dieselbe
-Regel für das Vorschaubild gilt auf der Ordner-Übersicht.
+Regel für das Vorschaubild gilt auf der Ordner-Übersicht. Gehören Gruppen zusammen, fasst **Gruppen
+zusammenfassen** sie gleich hier zusammen – wie auf der Übersicht ([mehr](#ordner-zusammenfassen-und-neu-gruppieren)),
+danach steht man wieder im Album.
 
 1. **Album anlegen** – auf der Seite „Alben“ oder mit „Neues Album“ über den Fotos. Beim Import geht es
    in einem Schritt: Feld „Album“ auf der Seite „Import“ ([mehr](#import-im-browser)).
@@ -398,6 +400,10 @@ was passiert: Alle Fotos kommen in den Zielordner – vorgewählt der mit der kl
 Aufnahme einen Laufindex (`IMG_0001_1.JPG`, die Fassungen passend dazu). Sterne, Alben, ein von Hand
 gesetztes Jahr, Gesichter und Namen bleiben erhalten; mehr Sterne als `MAX_BEST` je Ordner fallen weg –
 das sagt der Dialog vorher. Danach öffnet sich der Zielordner, die Meldung hat „Rückgängig“.
+
+Dasselbe geht in der Gruppenansicht eines Albums oder Filters ([Alben](#alben)): „Gruppen zusammenfassen“, Gruppen
+anklicken, „Zusammenfassen …“. Auch dort wandern ganze Ordner – samt ihrer Fotos, die nicht im Album sind; der
+Dialog sagt das. Danach zeigt die Seite wieder das Album, die Meldung hat „Rückgängig“ und „Ordner … öffnen“.
 
 **Fotos in eine eigene Gruppe:** Sind in einen Ordner Fotos geraten, die nicht dazugehören, auf der
 Ordnerseite „Fotos verschieben …“ klicken und die Fotos anklicken (Umschalt = alle bis zum zuletzt

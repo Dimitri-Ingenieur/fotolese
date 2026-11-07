@@ -367,13 +367,15 @@ function zahl(n){return String(n).replace(/\\B(?=(\\d{3})+(?!\\d))/g,'.');}
 function bilderText(n){return n===1?'1 Bild':zahl(n)+' Bilder';}
 // Ordner zusammenfassen: Ordner anklicken (Umschalt = Bereich), Vorschau, Analyse mit fotosort, Ausführen
 const zk=$('zusammen'),wl=$('wahlleiste'),zd=$('zdialog'),kacheln=[...document.querySelectorAll('.raster .kachel')];
+// Gruppen eines Albums oder Filters (data-bleiben): danach wieder diese Ansicht statt des Zielordners
+const BLEIBEN=!!(zk&&zk.dataset.bleiben),WORT=(zk&&zk.dataset.wort)||'Ordner';
 let wahl=false,letzte=-1,anaId=null,anaTimer=null;const gew=new Set();
 const NAMEN={SCHWELLE:'Bildvergleich',SERIE_SEK:'Serie: Zeitabstand',SERIE_SCHWELLE:'Serie: Abstand'};
 function liste(){return [...gew].sort((a,b)=>a-b);}  // nach Nummer: 9999 vor 10000
 function waehlen(an){wahl=an&&!!kacheln.length;document.body.classList.toggle('waehlen',wahl);wl.hidden=!wahl;
  zk.setAttribute('aria-pressed',wahl);if(!wahl){gew.clear();letzte=-1;}zeigen();}
 function zeigen(){kacheln.forEach(k=>k.classList.toggle('markiert',gew.has(k.dataset.o)));const l=liste();
- $('wahltext').textContent=l.length?l.length+' Ordner gewählt: '+l.join(', '):'Ordner anklicken, die zusammengehören (Umschalt = Bereich).';
+ $('wahltext').textContent=l.length?l.length+' '+WORT+' gewählt: '+l.join(', '):WORT+' anklicken, die zusammengehören (Umschalt = Bereich).';
  $('zstart').disabled=l.length<2;}
 if(zk)zk.addEventListener('click',()=>waehlen(!wahl));
 if(wl){$('zende').addEventListener('click',()=>waehlen(false));$('zstart').addEventListener('click',dialogAuf);
@@ -386,6 +388,7 @@ kacheln.forEach((k,i)=>k.addEventListener('click',ev=>{if(!wahl)return;ev.preven
    const ox=kacheln[x].dataset.o;if(ox!=='0000'){if(an)gew.add(ox);else gew.delete(ox);}}}
  else if(gew.has(o))gew.delete(o);else gew.add(o);letzte=i;zeigen();}));
 function dialogAuf(){const l=liste();if(l.length<2)return;zd.hidden=false;$('zok').disabled=false;
+ $('ztitel').textContent=WORT+' zusammenfassen';
  $('zziel').replaceChildren(...l.map(o=>new Option(o,o)));$('zziel').value=l[0];$('zliste').textContent=l.join(' · ');
  $('zinfo').textContent='';vorschauHolen();analyseStarten(l);$('zziel').focus();}
 function dialogZu(){zd.hidden=true;clearTimeout(anaTimer);if(anaId)post('/api/gruppieren',{aktion:'abbrechen',id:anaId});anaId=null;}
@@ -396,6 +399,7 @@ async function vorschauHolen(){const [ok,j]=await post('/api/gruppieren',{aktion
   'Verbesserte Fassungen, Begleitdateien, Sterne, Alben, Jahr und Gesichter wandern mit.';
  if(j.umbenannt)t+=' '+j.umbenannt+(j.umbenannt===1?' Aufnahme bekommt':' Aufnahmen bekommen')+' einen Laufindex, weil der Name im Ziel schon vorkommt (z. B. IMG_0001_1.JPG).';
  if(j.sterne_weg)t+=' Höchstens '+j.max_best+' Sterne je Ordner: '+j.sterne_weg+' entfallen.';
+ if(BLEIBEN)t+=' Zusammengefasst werden ganze Ordner – auch ihre Fotos, die hier nicht zu sehen sind, kommen mit.';
  $('zinfo').textContent=t;}
 async function analyseStarten(l){clearTimeout(anaTimer);const box=$('zanalyse');box.replaceChildren(absatz('fotosort vergleicht die Fotos …','leise'));
  const [ok,j]=await post('/api/gruppieren',{aktion:'analyse',ordner:l});
@@ -438,8 +442,10 @@ async function zusammenfassen(){const l=liste(),ziel=$('zziel').value;$('zok').d
  const [ok,j]=await post('/api/gruppieren',{aktion:'zusammenfassen',ordner:l,ziel});
  if(!ok){meldung(j.fehler||'Zusammenfassen nicht möglich.',true);$('zok').disabled=false;return;}
  meldung('Wird zusammengefasst …');const a=await auftragWarten();
- try{sessionStorage.setItem('bestofMeldung',JSON.stringify({text:a.fehler||a.ergebnis,fehler:!!a.fehler,rueck:!a.fehler}));}catch(_){}
- location.href='/o/'+ziel;}
+ const hier=location.pathname+location.search;
+ try{sessionStorage.setItem('bestofMeldung',JSON.stringify({text:a.fehler||a.ergebnis,fehler:!!a.fehler,rueck:!a.fehler,
+  nachher:BLEIBEN?hier:null,ziel:BLEIBEN&&!a.fehler?ziel:null}));}catch(_){}
+ location.href=BLEIBEN?hier:'/o/'+ziel;}
 const nb=document.getElementById('neuaufbau');
 if(nb)nb.addEventListener('click',async()=>{
  if(!confirm('BestOf aus den gespeicherten Sternen neu aufbauen? Fehlende Kopien werden ergänzt, veraltete entfernt.'))return;
@@ -1547,15 +1553,21 @@ def _gruppen_seite(app, text, zeilen, erklaerung, seite_nr, ansicht):
              + (f", Seite {seite_nr} von {seiten}" if seiten > 1 else ""))
     titel = f'<div class="titel"><div><p id="info">{stand}</p></div></div>'
     chips = "".join(f'<span class="chip">{e(t)}</span>' for t in erklaerung)
+    zusammen = ('<button class="knopf" id="zusammen" type="button" aria-pressed="false" data-bleiben="1" '
+                'data-wort="Gruppen" title="Gruppen anklicken, die zusammengehören, und zu einer zusammenfassen – es '
+                'wandern ganze Ordner, mit „Rückgängig“">Gruppen zusammenfassen</button>' if len(kacheln) > 1 else "")
     inhalt = (kopf(app, "", titel, text)
-              + f'<div class="filter" aria-label="Erkannter Filter">{chips}{_ansicht_schalter(text, "gruppen")}</div>'
-              + f'<main class="raster">{"".join(kacheln)}</main>'
+              + f'<div class="filter" aria-label="Erkannter Filter">{chips}{_ansicht_schalter(text, "gruppen")}'
+                f'{zusammen}</div>'
+              + f'<main class="raster">{"".join(kacheln)}</main>' + (ZUSAMMEN_HTML if zusammen else "")
               + seiten_nav(seite_nr, seiten, lambda n: "/suche?" + urlencode(
                   {"q": text, "seite": n, **({"ansicht": ansicht} if ansicht else {})}))
               + '<p class="hilfe">Eine Gruppe ist ein Ordner mit ähnlichen Fotos; die Kachel zeigt, wie viele seiner '
                 'Fotos zum Filter passen. Vorschau ist das Foto mit Stern, sonst das zuletzt geänderte. Anklicken zeigt '
-                'die Fotos der Gruppe einzeln, „Einzeln“ oben alle Fotos.</p>')
-    return seite(f"{text} – BestOf", inhalt)
+                'die Fotos der Gruppe einzeln, „Einzeln“ oben alle Fotos. „Gruppen zusammenfassen“: Gruppen anklicken, '
+                'die zusammengehören (Umschalt = Bereich), dann „Zusammenfassen …“ – wie auf der Ordner-Übersicht '
+                'wandern ganze Ordner, „Rückgängig“ inklusive.</p>')
+    return seite(f"{text} – BestOf", inhalt, JS_UEBERSICHT)
 
 
 def personen_gruppen(index, mindest, ignorierte):
