@@ -21,6 +21,7 @@ auch selbst aufrufen – dann müssen Sie fotosort.py nicht von Hand starten.
 - schreibt ein Protokoll; `MODUS=undo` macht einen Lauf rückgängig
 - plant eine Neu-Gruppierung des ganzen Archivs (`MODUS=gruppen`) und nennt die Ähnlichkeitswerte, mit denen
   bestimmte Ordner zusammengekommen wären (`MODUS=analyse`) – ausgeführt wird in bestof.py
+- nennt zu einem Foto die ähnlichsten im Archiv, nach Ähnlichkeit sortiert (`MODUS=aehnlich`)
 
 **bestof.py** – Weboberfläche im Browser (Paket `fotolese/web/`)
 - je Ordner bis zu 3 beste Fotos mit Stern ☆ markieren → Kopie in `Sortiert/BestOf`
@@ -29,6 +30,9 @@ auch selbst aufrufen – dann müssen Sie fotosort.py nicht von Hand starten.
 - Alben: jedes Foto in beliebig vielen Alben, sichtbar unter dem Foto, im Filter nutzbar ([mehr](#alben))
 - „Alle Fotos“, „Ohne Album“ und Jahr per Klick: das Archiv durchgehen, Alben und Jahre schnell zuordnen
   ([mehr](#alle-fotos-und-jahr-per-klick))
+- Ähnliche Fotos: „≈ Ähnliche“ in der Lupe zeigt die ähnlichsten Fotos im ganzen Archiv, nach Ähnlichkeit
+  sortiert, jedes mit seinem Abstand; gefundene Fotos lassen sich zum Ausgangsfoto verschieben
+  ([mehr](#ähnliche-fotos))
 - Papierkorb: ein Klick schiebt ein Foto nach `Sortiert/Musor`, mit „Rückgängig“; endgültig gelöscht wird
   nur im Dateimanager ([mehr](#papierkorb))
 - im Heimnetz erreichbar, z. B. `http://tigris:8765` vom Tablet; importieren nur am Rechner selbst
@@ -200,6 +204,41 @@ jedem Ordner und Filterergebnis, auch in der Lupe. ✕ oder <kbd>Esc</kbd> im Ja
 beendet es. Wie beim Jahresfeld unter dem Foto gilt das Jahr vor EXIF und Dateiname (gelb = von Hand);
 leeren + Enter im Feld unter dem Foto gibt wieder das Jahr aus der Datei.
 
+### Ähnliche Fotos
+
+In der Lupe sucht **≈ Ähnliche** zum gezeigten Foto die ähnlichsten im ganzen Archiv. Gerechnet wird wie
+beim Import: fotosort.py kennt von jedem Foto zwei Wahrnehmungs-Fingerabdrücke (pHash und dHash, je 64 Bit),
+der Abstand zählt die Bits, in denen sie sich unterscheiden – 0 heißt gleich, um 60 ganz verschieden. Die
+Seite zeigt vorn das Ausgangsfoto, dahinter die Treffer nach Abstand sortiert, jeden mit Abstand und Wort:
+
+| Abstand | Wort | meist |
+|---|---|---|
+| 0 | gleich | dieselbe Aufnahme, auch in anderer Größe |
+| 1–8 | fast gleich | andere Kompression, leicht nachbearbeitete Kopie |
+| bis `SCHWELLE` (20) | sehr ähnlich | beim Import kämen die Fotos in eine Gruppe – Abstand in Gelb |
+| bis 36 | ähnlich | Serienbilder, dasselbe Motiv kurz danach |
+| bis 48 | entfernt ähnlich | ähnlicher Bildaufbau, oft schon ein anderes Motiv |
+
+Mit der Maus über dem Abstand stehen Einzelheiten, bei Fotos derselben Kamera auch, wie viele Sekunden
+dazwischen liegen. Gezeigt werden höchstens 150 Fotos bis Abstand 48 (`AEHNLICH_ANZAHL`, `AEHNLICH_BIS` als
+Umgebungsvariablen beim Start von bestof.py). Das Foto selbst und seine NEF fehlen in der Liste, ebenso
+einfarbige und unlesbare Fotos – die lassen sich nicht vergleichen. Die Fassungen im Unterordner `verbessert`
+(verbessert, koloriert, bearbeitet) stehen nicht in der Liste, taugen aber als Ausgangsfoto.
+
+Beim ersten Mal liest fotosort.py alle Fotos, die es noch nicht kennt; bei einem großen Archiv dauert das,
+die Seite zeigt den Fortschritt. Danach kommen die Fingerabdrücke aus dem Cache, und eine Suche braucht nur
+Sekunden. „Neu suchen“ rechnet noch einmal.
+
+Sonst ist die Seite ein Kontaktbogen wie ein Ordner: Lupe, Stern, Papierkorb, Alben und Jahr gehen auch
+hier. **Fotos verschieben …** holt Treffer zum Ausgangsfoto: Fotos anklicken (Umschalt = Bereich), dann
+„Zu 0004 (Ausgangsfoto)“ – oder wie auf der Ordnerseite „In neue Gruppe“ bzw. eine Ordnernummer eintippen.
+Alles wandert mit wie beim [Verschieben](#ordner-zusammenfassen-und-neu-gruppieren), die Meldung hat
+„Rückgängig“, und die Seite sucht danach neu. Auf der Kommandozeile:
+
+```bash
+MODUS=aehnlich python fotosort.py AUSGABE 0004/IMG_0001.JPG   # die ähnlichsten Fotos zu diesem Foto
+```
+
 ### Papierkorb
 
 Der Eimer neben dem Stern (in der Lupe auch die Taste <kbd>Entf</kbd>) schiebt ein Foto in den
@@ -223,7 +262,7 @@ und die IP-Adresse; klappt der Name nicht, hilft `http://tigris.local:8765` oder
 z. B. `sudo ufw allow 8765/tcp`.
 
 Aus dem Heimnetz geht alles außer dem Import: Fotos ansehen, Sterne, Alben, Jahre, Namen, Papierkorb,
-Ordner zusammenfassen, Fotos verschieben, Einstellungen. Importieren geht nur an dem Rechner selbst
+ähnliche Fotos, Ordner zusammenfassen, Fotos verschieben, Einstellungen. Importieren geht nur an dem Rechner selbst
 (`http://localhost:8765`), ebenso das Ändern der ComfyUI-Adresse und das Hochladen von Workflows –
 bestof.py erkennt das an der Absenderadresse, nicht an einem Passwort. Wer im Heimnetz nicht jedem die
 Fotos zeigen will, setzt in `bestof.conf` ein `PASSWORT` (der Benutzername ist beliebig). `HOST = 127.0.0.1`
@@ -344,7 +383,8 @@ wohin sie gehören, tippt stattdessen die Nummer eines vorhandenen Ordners ein u
 Ordner“. Wie beim Zusammenfassen wandern NEF, Begleitdateien, verbesserte Fassungen (eine gewählte
 Fassung nimmt ihr Original mit), Sterne, Alben, Jahr und Gesichter mit; die Meldung danach hat
 „Rückgängig“ und öffnet auf Wunsch den neuen Ordner. Wird ein Ordner dabei leer, verschwindet er.
-<kbd>Esc</kbd> oder „Fertig“ beendet die Auswahl.
+<kbd>Esc</kbd> oder „Fertig“ beendet die Auswahl. Verstreute Fotos eines Motivs sammelt
+[Ähnliche Fotos](#ähnliche-fotos) ein.
 
 **Welche Ähnlichkeit hätte gereicht?** Im selben Dialog rechnet fotosort.py aus, mit welchem Wert es
 diese Fotos beim Import selbst in eine Gruppe gelegt hätte: je Einstellung der kleinste, der bei sonst
@@ -464,7 +504,7 @@ fotolese/                    Projektordner
 │   │   ├── gruppe.py        Duplikate (SHA-256), Gruppierung, passende Bestandsordner
 │   │   ├── plan.py          Zielnamen mit Laufindex, Verschiebeplan
 │   │   ├── lauf.py          verschieben, kopieren, verlinken; Protokoll; Rückgängig
-│   │   ├── neu.py           Neu-Gruppierung des Archivs (Plan) und Analyse nötiger Werte
+│   │   ├── neu.py           Neu-Gruppierung des Archivs (Plan), Analyse nötiger Werte, ähnliche Fotos
 │   │   └── cli.py           main() und Hilfetext (-h)
 │   └── web/                 bestof: durchsehen, filtern, Sterne für BestOf
 │       ├── konst.py         Konstanten, Muster, Monatsnamen, Quellen der Modelle
@@ -487,6 +527,7 @@ fotolese/                    Projektordner
 │       ├── lernen.py        aus Korrekturen Schwelle und Abstand lernen
 │       ├── importieren.py   Seite „Import“ (nur am Rechner selbst): fotosort.py, Duplikate
 │       ├── gruppieren.py    Ordner zusammenfassen, Plan ausführen, Rückgängig (Umzug mit Index)
+│       ├── aehnlich.py      Seite „Ähnliche Fotos“: Treffer von fotosort als Kontaktbogen
 │       ├── einstellungen.py Seite „Einstellungen“, Workflows hochladen
 │       └── cli.py           main() und Hilfetext (-h)
 ├── workflows/               ComfyUI-Workflows (API-Format) für „Verbessern“
@@ -506,9 +547,10 @@ fotolese/                    Projektordner
   Verbunden sind sie nur über Unterprozesse: `web/importieren.py` startet `fotosort.py` mit demselben
   Python – für den [Import im Browser](#import-im-browser) mit `MODUS=copy`, `DUPLIKATE=1`, `JOBS` aus
   `IMPORT_JOBS`, für die Analyse und die Vorschau von „Neu gruppieren“ mit `MODUS=analyse` bzw.
-  `MODUS=gruppen` (Plan als JSON in `Sortiert/.bestof-umzug/`), immer mit den Ähnlichkeitswerten aus den
-  Einstellungen, `JA=1` und `FORTSCHRITT_JSON=1`. bestof.py liest die Ausgabe mit: `#FS {json}`-Zeilen (aus
-  `sort/bericht.py`) für Fortschritt und Ergebnisse, die Zeile `Protokoll: …` für „Import rückgängig“.
+  `MODUS=gruppen` (Plan als JSON in `Sortiert/.bestof-umzug/`), für [Ähnliche Fotos](#ähnliche-fotos) mit
+  `MODUS=aehnlich`, immer mit den Ähnlichkeitswerten aus den Einstellungen, `JA=1` und `FORTSCHRITT_JSON=1`.
+  bestof.py liest die Ausgabe mit: `#FS {json}`-Zeilen (aus `sort/bericht.py`) für Fortschritt und
+  Ergebnisse, die Zeile `Protokoll: …` für „Import rückgängig“.
   Verschoben wird beim Neu-Gruppieren von `web/gruppieren.py`, damit Sterne, Alben und Index mitwandern.
 
 ## Datenschutz

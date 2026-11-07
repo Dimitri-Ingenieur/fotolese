@@ -370,6 +370,7 @@ class Umzug(threading.Thread):
             st["fehler"] = f"{type(fehler).__name__}: {fehler}"
         finally:
             st.update(laeuft=False, ende=time.time(), phase="Fehler" if st["fehler"] else "Fertig")
+            app.archiv_stand = time.time()  # Archiv geändert: frühere Suchen nach ähnlichen Fotos gelten nicht mehr
             app.archiv.ordner(frisch=True)
             if app.indexer:
                 app.indexer.weiter.set()
@@ -634,24 +635,28 @@ class Umzug(threading.Thread):
 
 
 class Rechnung(threading.Thread):
-    """fotosort rechnet, ohne etwas zu verschieben: MODUS=analyse (Werte für eine Auswahl) oder MODUS=gruppen (Plan
-    für das ganze Archiv). Läuft neben anderem; das Ergebnis holt die Seite über die ID."""
+    """fotosort rechnet, ohne etwas zu verschieben: MODUS=analyse (Werte für eine Auswahl), MODUS=gruppen (Plan für
+    das ganze Archiv) oder MODUS=aehnlich (die ähnlichsten Fotos zu einem Foto, bezug = „0004/<Name>“). Läuft neben
+    anderem; das Ergebnis holt die Seite über die ID."""
 
-    def __init__(self, app, art, ordner=None, werte=None):
+    def __init__(self, app, art, ordner=None, werte=None, bezug=None):
         super().__init__(daemon=True)
-        self.app, self.art, self.ordner, self.werte = app, art, ordner or [], werte or {}
+        self.app, self.art, self.ordner, self.werte, self.bezug = app, art, ordner or [], werte or {}, bezug
         self.id = secrets.token_urlsafe(9)
         self.proc, self.plan = None, None
         self.status = {"id": self.id, "art": art, "laeuft": True, "phase": "Start", "fertig": 0, "gesamt": 0,
                        "zusatz": "", "fehler": "", "ergebnis": None, "text": [], "ordner": self.ordner,
-                       "werte": dict(app.gruppe, **self.werte), "start": time.time()}
+                       "werte": dict(app.gruppe, **self.werte), "start": time.time(), "bezug": bezug}
 
     def run(self):
         app, st = self.app, self.status
         erg = {}
         try:
-            umgebung = {"MODUS": "analyse" if self.art == "analyse" else "gruppen", "JOBS": str(app.import_jobs),
-                        **gruppen_umgebung(app, self.werte)}
+            modus = {"analyse": "analyse", "plan": "gruppen", "aehnlich": "aehnlich"}[self.art]
+            umgebung = {"MODUS": modus, "JOBS": str(app.import_jobs), **gruppen_umgebung(app, self.werte)}
+            argumente = [app.archiv.pfad, *self.ordner]
+            if self.art == "aehnlich":
+                argumente = [app.archiv.pfad, os.path.join(app.archiv.pfad, *self.bezug.split("/"))]
             if self.art == "plan":
                 os.makedirs(umzug_ordner(app), exist_ok=True)
                 self.plan = os.path.join(umzug_ordner(app), f"plan-{time.strftime('%Y%m%d-%H%M%S')}-{self.id}.json")
@@ -662,12 +667,12 @@ class Rechnung(threading.Thread):
                 if z.strip():
                     st["text"] = (st["text"] + [z])[-60:]
 
-            code = fotosort_lauf(app, [app.archiv.pfad, *self.ordner], umgebung, st, self, text_zeile, erg.update)
+            code = fotosort_lauf(app, argumente, umgebung, st, self, text_zeile, erg.update)
             if code:
                 st["fehler"] = ("Abgebrochen." if code < 0 or code == 130 else
                                 (st["text"][-1] if st["text"] else f"fotosort meldet Fehler {code}."))
-            elif self.art == "analyse":
-                st["ergebnis"] = erg.get("analyse")
+            elif self.art in ("analyse", "aehnlich"):
+                st["ergebnis"] = erg.get(self.art)
             else:
                 with open(self.plan, encoding="utf-8") as f:
                     plan = json.load(f)
@@ -784,17 +789,29 @@ def _belegt(app):
 
 
 def gruppieren_api(app, daten):
-    """POST /api/gruppieren: aktion = analyse | plan | abbrechen | vorschau | zusammenfassen | ausfuehren |
-    rueckgaengig. Rückgabe: (Code, Antwort)."""
+    """POST /api/gruppieren: aktion = analyse | plan | aehnlich | abbrechen | vorschau | zusammenfassen | verschieben |
+    ausfuehren | rueckgaengig. Rückgabe: (Code, Antwort)."""
     aktion = daten.get("aktion")
     try:
-        if aktion in ("analyse", "plan"):
+        if aktion in ("analyse", "plan", "aehnlich"):
             if not os.path.isfile(app.fotosort):
                 return 500, {"fehler": f"fotosort.py fehlt: {app.fotosort}"}
+            if aktion == "aehnlich":
+                (o, name), = _pfade_pruefen(app, [daten.get("pfad")])
+                bezug = f"{o}/{name}"
+                vorhanden = next((r for r in reversed(list(app.rechnungen.values())) if r.art == "aehnlich"
+                                  and r.bezug == bezug and not r.status["fehler"]
+                                  and r.status["start"] >= getattr(app, "archiv_stand", 0)
+                                  and (r.status["laeuft"] or not daten.get("neu")
+                                       and time.time() - r.status["start"] < 300)), None)
+                if vorhanden:  # gleiche Frage vor kurzem: dieselbe Rechnung, z. B. nach Neuladen der Seite
+                    return 200, {"id": vorhanden.id}
             laufend = [r for r in app.rechnungen.values() if r.status["laeuft"]]
             if len(laufend) >= 2:
                 return 409, {"fehler": "Es laufen schon zwei Berechnungen – bitte warten."}
-            if aktion == "analyse":
+            if aktion == "aehnlich":
+                r = Rechnung(app, "aehnlich", bezug=bezug)
+            elif aktion == "analyse":
                 r = Rechnung(app, "analyse", ordner=_ordner_pruefen(app, daten.get("ordner")))
             else:
                 r = Rechnung(app, "plan", werte=_werte_pruefen(daten.get("werte") or {}))

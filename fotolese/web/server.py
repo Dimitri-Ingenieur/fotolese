@@ -29,6 +29,7 @@ from fotolese.web.importieren import import_api, import_seite, ordner_liste, pap
 from fotolese.web.papierkorb import papierkorb_api
 from fotolese.web.bearbeiten import bearbeiten_api
 from fotolese.web.gruppieren import gruppieren_api, gruppieren_stand
+from fotolese.web.aehnlich import aehnlich_seite
 from fotolese.web.einstellungen import MAX_WORKFLOW, einstellungen_api, einstellungen_seite, workflow_hochladen
 
 
@@ -170,6 +171,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._senden(200, html_typ, import_seite(app))
         if teile.path == "/einstellungen":
             return self._senden(200, html_typ, einstellungen_seite(app))
+        if teile.path == "/aehnlich":
+            return self._senden(200, html_typ, aehnlich_seite(app, q.get("pfad", [""])[0][:2000], q.get("id", [""])[0][:40]))
         if teile.path in ("/api/ordner", "/api/import/status") and not import_frei(app):
             return self._json(403, {"fehler": "Import geht nur an dem Rechner, auf dem bestof.py läuft."})
         if teile.path == "/api/ordner":

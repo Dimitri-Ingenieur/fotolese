@@ -27,6 +27,7 @@ Aufruf (Conda):
   MODUS=undo python fotosort.py AUSGABE/fotosort_<zeit>.csv
   MODUS=gruppen python fotosort.py AUSGABE           # Plan: ganzes Archiv neu gruppieren
   MODUS=analyse python fotosort.py AUSGABE 0004 0005 # welche Werte hätten diese Ordner zusammengebracht?
+  MODUS=aehnlich python fotosort.py AUSGABE 0004/IMG_0001.JPG   # die ähnlichsten Fotos im Archiv
 
 Nachträglich gruppieren (beide Modi planen nur, verschoben wird nichts):
   gruppen  gruppiert alle Bilder direkt in AUSGABE/0000–99999 mit den Werten unten, als kämen sie in einem Import.
@@ -37,8 +38,12 @@ Nachträglich gruppieren (beide Modi planen nur, verschoben wird nichts):
   analyse  nennt je Wert (SCHWELLE, SERIE_SEK, SERIE_SCHWELLE) den kleinsten, mit dem fotosort die Bilder der
            Ordner beim Import in eine Gruppe gelegt hätte, und was der Wert sonst im Archiv zusammenlegen würde.
 
+  aehnlich nennt die Fotos im Archiv, die BILD am ähnlichsten sind, nach pHash+dHash-Abstand sortiert (0 = gleich),
+           höchstens AEHNLICH_ANZAHL (150) bis zum Abstand AEHNLICH_BIS (48). BILD darf auch eine Fassung im Unterordner
+           „verbessert“ sein. Verglichen wird mit den Bildern direkt in den Ordnern; bestof.py zeigt sie an.
+
 Umgebungsvariablen (Standard in Klammern):
-  MODUS           (move)   move | copy | link | test | undo | gruppen | analyse
+  MODUS           (move)   move | copy | link | test | undo | gruppen | analyse | aehnlich
                            link = Vorschau mit symbolischen Links (nur Linux-Dateisysteme)
   JA              (0)      1 = ohne Rückfrage ausführen
   SCHWELLE        (20)     Bildvergleich: max. Abstand pHash+dHash (0–128)
@@ -75,7 +80,7 @@ from fotolese.sort.suche import ordne_begleitdateien, suche, suche_bestand
 from fotolese.sort.gruppe import duplikate_finden, finde_anker, gruppiere
 from fotolese.sort.plan import dateisystem, hoechste_nummer, plane
 from fotolese.sort.lauf import Protokoll, ausfuehren, bestaetigen, leere_ordner_entfernen, rueckgaengig
-from fotolese.sort.neu import neu_main
+from fotolese.sort.neu import aehnlich_main, neu_main
 
 
 def main():
@@ -92,8 +97,8 @@ def main():
         print(__doc__)
         return 0
     modus = _env("MODUS", "move").lower()
-    if modus not in ("move", "copy", "link", "test", "undo", "gruppen", "analyse"):
-        sys.exit(f"Fehler: MODUS={modus!r} – erlaubt: move, copy, link, test, undo, gruppen, analyse")
+    if modus not in ("move", "copy", "link", "test", "undo", "gruppen", "analyse", "aehnlich"):
+        sys.exit(f"Fehler: MODUS={modus!r} – erlaubt: move, copy, link, test, undo, gruppen, analyse, aehnlich")
     if modus == "undo":
         if len(args) != 1:
             sys.exit("Aufruf: MODUS=undo python fotosort.py AUSGABE/fotosort_<zeit>.csv")
@@ -108,8 +113,10 @@ def main():
     if not (0 <= schwelle <= 128 and 0 <= serie_schwelle <= 128 and serie_sek >= 0):
         sys.exit("Fehler: SCHWELLE und SERIE_SCHWELLE liegen zwischen 0 und 128, SERIE_SEK ist nicht negativ.")
     jobs = max(1, _env("JOBS", os.cpu_count() or 1, int))
-    if modus in ("gruppen", "analyse"):
+    if modus in ("gruppen", "analyse", "aehnlich"):
         cache_pfad = os.path.expanduser(_env("CACHE", "~/.cache/fotosort/cache.sqlite3"))
+        if modus == "aehnlich":
+            return aehnlich_main(args, jobs, cache_pfad)
         return neu_main(modus, args, schwelle, serie_sek, serie_schwelle, einzeln, jobs, cache_pfad)
     if len(args) != 2:
         sys.exit("Aufruf: python fotosort.py EINGABE AUSGABE   (Hilfe: -h)")

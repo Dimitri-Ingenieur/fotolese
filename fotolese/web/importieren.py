@@ -287,6 +287,7 @@ class Auftrag(threading.Thread):
             st["fehler"] = f"{type(fehler).__name__}: {fehler}"
         finally:
             st.update(laeuft=False, ende=time.time(), phase="Fehler" if st["fehler"] else "Fertig")
+            app.archiv_stand = time.time()  # Archiv geändert: frühere Suchen nach ähnlichen Fotos gelten nicht mehr
             app.archiv.ordner(frisch=True)
             if app.indexer:
                 app.indexer.weiter.set()  # neue Bilder gleich einlesen

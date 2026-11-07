@@ -26,7 +26,7 @@ from datetime import datetime
 
 import numpy as np
 
-from fotolese.gemein import ist_ordner, ordner_folge
+from fotolese.gemein import _env, ist_ordner, ordner_folge
 from fotolese.sort.konst import BILD_EXT, FLACH_STD, MAX_ORDNER, VERSION
 from fotolese.sort.bericht import Fortschritt, info, json_zeile, zahl, JSON_FORTSCHRITT
 from fotolese.sort.bild import analysieren
@@ -518,6 +518,75 @@ def analyse_text(erg):
                                                   for b in f["beispiele"][:3]))
             zeilen.append("      Folgen: " + ", ".join(teile))
     return zeilen
+
+
+# ---- Ähnliche Fotos zu einem Foto
+
+def aehnliche(bilder, bezug, anzahl=150, bis=48):
+    """Die Bilder, die bezug am ähnlichsten sind: pHash+dHash-Abstand ≤ bis, nach Abstand sortiert, höchstens anzahl.
+    Ohne bezug selbst und seine Aufnahme (gleicher Ordner und Namensstamm, z. B. die NEF zum JPG) und ohne NEF, zu der
+    es im selben Ordner ein JPG/PNG gibt (bestof zeigt das JPG). Rückgabe: [(Datei, Abstand, Sekunden oder None)] –
+    Sekunden nur bei gleicher Kamera und bekannter Aufnahmezeit."""
+    if not vergleichbar(bezug):
+        return []
+    eigen, echt = _stamm(bezug), os.path.realpath(bezug.pfad)
+    gezeigt = {_stamm(d) for d in bilder if os.path.splitext(d.pfad)[1].lower() in (".jpg", ".jpeg", ".png")}
+    kand = [d for d in bilder if vergleichbar(d) and _stamm(d) != eigen and os.path.realpath(d.pfad) != echt
+            and not (os.path.splitext(d.pfad)[1].lower() == ".nef" and _stamm(d) in gezeigt)]
+    if not kand:
+        return []
+    ph = np.array([d.res[0] for d in kand], dtype=np.uint64)
+    dh = np.array([d.res[1] for d in kand], dtype=np.uint64)
+    abstand = (_popcount(ph ^ np.uint64(bezug.res[0])).astype(np.int32)
+               + _popcount(dh ^ np.uint64(bezug.res[1])).astype(np.int32))
+    treffer, rb = [], bezug.res
+    for k in np.argsort(abstand, kind="stable")[:anzahl].tolist():
+        a = int(abstand[k])
+        if a > bis:
+            break
+        r = kand[k].res
+        sek = abs(r[3] - rb[3]) if r[5] and r[5] == rb[5] and r[3] is not None and rb[3] is not None else None
+        treffer.append((kand[k], a, sek))
+    return treffer
+
+
+def aehnlich_main(args, jobs, cache_pfad):
+    """MODUS=aehnlich AUSGABE BILD: die ähnlichsten Fotos im Archiv zu BILD (auch eine Fassung in „verbessert“)."""
+    if len(args) != 2:
+        sys.exit("Aufruf: MODUS=aehnlich python fotosort.py AUSGABE BILD   (BILD z. B. 0004/IMG_0001.JPG)")
+    ausgabe = os.path.abspath(args[0])
+    pfad = os.path.abspath(args[1] if os.path.isabs(args[1]) else os.path.join(ausgabe, args[1]))
+    rel = os.path.relpath(pfad, ausgabe)
+    teile = rel.split(os.sep)
+    if not os.path.isdir(ausgabe) or rel.startswith("..") or len(teile) < 2 or not ist_ordner(teile[0]) \
+            or not os.path.isfile(pfad) or os.path.splitext(pfad)[1].lower() not in BILD_EXT:
+        sys.exit(f"Fehler: {args[1]} ist kein Bild in einem Ordner 0000–99999 von {ausgabe}.")
+    anzahl = max(1, _env("AEHNLICH_ANZAHL", 150, int))
+    bis = min(128, max(0, _env("AEHNLICH_BIS", 48, int)))
+    info(f"fotosort {VERSION} · Modus aehnlich · {rel}")
+    bilder = suche_archiv(ausgabe)
+    echt = os.path.realpath(pfad)
+    bezug = next((d for d in bilder if os.path.realpath(d.pfad) == echt), None)
+    alle = bilder if bezug else bilder + [Datei(pfad, os.stat(pfad), anker=teile[0])]
+    bezug = bezug or alle[-1]
+    info(f"Gefunden: {zahl(len(bilder))} Bilder in {zahl(len({d.anker for d in bilder}))} Ordnern")
+    cache = Cache(cache_pfad)
+    atexit.register(cache.schliessen)
+    try:
+        analysieren(alle, cache, jobs)
+    except KeyboardInterrupt:
+        cache.schliessen()
+        sys.exit("\nAbgebrochen während der Analyse. Bisherige Ergebnisse sind im Cache.")
+    cache.schliessen()
+    grund = "" if vergleichbar(bezug) else ("nicht lesbar" if not bezug.ok else "einfarbig – lässt sich nicht vergleichen")
+    treffer = aehnliche(bilder, bezug, anzahl, bis)
+    info(f"Ähnlich zu {rel.replace(os.sep, '/')}: {zahl(len(treffer))} Fotos mit Abstand bis {bis}"
+         + (f" – {grund}" if grund else ""))
+    for d, a, sek in treffer[:10]:
+        info(f"  {a:3d}  {_rel(d)}" + (f"  (gleiche Kamera, {sek:g} s)" if sek is not None else ""))
+    json_zeile({"aehnlich": {"bezug": rel.replace(os.sep, "/"), "bilder": len(bilder), "bis": bis, "grund": grund,
+                             "treffer": [[_rel(d), a, None if sek is None else round(sek, 1)] for d, a, sek in treffer]}})
+    return 0
 
 
 # ---- Kommandozeile

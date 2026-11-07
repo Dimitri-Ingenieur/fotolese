@@ -205,6 +205,10 @@ kbd{font-family:var(--zahl);border:1px solid var(--linie);padding:0 5px;border-r
   border-radius:2px;z-index:2;pointer-events:none;max-width:70%}
 .lupe .vregler{width:8em;accent-color:var(--stift)}
 .lupe .knopf.vgl[aria-pressed=true]{border-color:var(--stift);color:var(--stift)}
+.abadge{position:absolute;right:8px;bottom:8px;max-width:calc(100% - 16px);overflow:hidden;text-overflow:ellipsis;
+ white-space:nowrap;font-size:12px;padding:2px 7px;border-radius:999px;background:rgba(0,0,0,.72);color:var(--text)}
+.abadge.nah{color:var(--stift)}.abadge.bezug{background:var(--stift);color:var(--umfeld);font-weight:700}
+.aehnbild{display:block;max-width:min(420px,100%);max-height:50vh;margin:0 0 10px}.aehnzeile p{margin:0;max-width:110ch}
 .vbadge{position:absolute;left:8px;bottom:8px;max-width:calc(100% - 16px);overflow:hidden;text-overflow:ellipsis;
   white-space:nowrap;font-size:12px;padding:1px 7px;border-radius:2px;background:rgba(40,40,40,.86);color:var(--stift);
   pointer-events:none}
@@ -335,7 +339,8 @@ async function umzugZurueck(nachher){const [ok,j]=await post('/api/gruppieren',{
  if(!ok){meldung(j.fehler||'Nicht möglich.',true);return;}meldung('Wird zurückgenommen …');const a=await auftragWarten();
  try{sessionStorage.setItem('bestofMeldung',JSON.stringify({text:a.fehler||a.ergebnis,fehler:!!a.fehler}));}catch(_){}
  location.href=nachher||'/';}
-try{const m=JSON.parse(sessionStorage.getItem('bestofMeldung')||'null');sessionStorage.removeItem('bestofMeldung');
+if(!document.querySelector('.aehnwarten'))try{  // Warteseite „Ähnliche“ leitet gleich weiter: Meldung dort zeigen
+ const m=JSON.parse(sessionStorage.getItem('bestofMeldung')||'null');sessionStorage.removeItem('bestofMeldung');
  if(m){const akt=[];if(m.rueck)akt.push(['Rückgängig',()=>umzugZurueck(m.nachher)]);
   if(m.ziel&&location.pathname!=='/o/'+m.ziel)akt.push(['Ordner '+m.ziel+' öffnen',()=>{location.href='/o/'+m.ziel;}]);
   setTimeout(()=>meldung(m.text,!!m.fehler,akt.length?akt:null),50);}}catch(_){}
@@ -438,6 +443,7 @@ const felder=[...document.querySelectorAll('.feld')],info=document.getElementByI
 const lupe=document.querySelector('.lupe'),lupeImg=lupe.querySelector('img'),flaeche=lupe.querySelector('.flaeche'),
  lupeWo=lupe.querySelector('.wo'),lupeWer=lupe.querySelector('.wer'),lupeInfo=lupe.querySelector('.info'),
  lupeKnopf=lupe.querySelector('.stern'),lupeOrig=lupe.querySelector('.orig'),lupeKarte=lupe.querySelector('.karte'),
+ lupeAehnl=lupe.querySelector('.aehnl'),
  gzKnopf=lupe.querySelector('.gz'),lupeJahr=D.jahr?lupe.querySelector('.jahr'):null,lupeJsetz=lupe.querySelector('.jsetz'),
  zusammenEl=document.getElementById('zusammen');
 if(!D.jahr)lupe.querySelector('.jahr').hidden=true;
@@ -610,7 +616,7 @@ function lupeZeichne(){const b=D.bilder[aktiv],l=D.auswahl[b.ordner]||[],an=l.in
  sternKnopf(lupeKnopf,b,an,voll);lupeKnopf.title+=' (Leertaste oder S)';kaesten();albenLupe();verbLupe();}
 function oeffne(i,schritt){bearbeitenAus();const j=sichtbar(i,schritt||1);if(j<0){schliesse();return;}
  vergleichZu(false);nbox.hidden=true;nGesicht=null;aktiv=j;const b=D.bilder[aktiv];
- lupeImg.src=b.g;lupeImg.alt=b.name;lupeOrig.href=b.o;lupe.hidden=false;lupeZeichne();if(gesichterAn)gesichterHolen(aktiv);
+ lupeImg.src=b.g;lupeImg.alt=b.name;lupeOrig.href=b.o;lupeAehnl.href='/aehnlich?pfad='+encodeURIComponent(b.ordner+'/'+b.id);lupe.hidden=false;lupeZeichne();if(gesichterAn)gesichterHolen(aktiv);
  vorladen(aktiv+1);vorladen(aktiv-1);lupe.querySelector('.zu').focus({preventScroll:true});}
 function schliesse(){if(aktiv<0)return;vergleichZu(false);nbox.hidden=true;nGesicht=null;const f=felder[aktiv];aktiv=-1;
  bearbeitenAus();lupe.hidden=true;
@@ -801,9 +807,10 @@ if(albLeisteEl){aktSel.addEventListener('change',()=>albAktiv(aktSel.value?+aktS
   const name=prompt('Name des neuen Albums, z. B. Urlaub 2023:','');if(name===null||!name.trim())return;
   const [ok,j]=await post('/api/album',{aktion:'neu',name});if(!ok){meldung(j.fehler||'Anlegen fehlgeschlagen.',true);return;}
   albUebernehmen(j);albAktiv(j.album);meldung(j.meldung+' Jetzt Fotos mit ＋ hinzufügen.');});
- const alleSetzen=an=>{const wo=D.suche?{suche:D.suche}:{ordner:D.ordner},n=D.suche?D.treffer:D.bilder.length,name=albName(aktAlbum);
+ const alleSetzen=an=>{const wo=D.suche?{suche:D.suche}:D.ordner?{ordner:D.ordner}:
+   {pfade:D.bilder.filter(b=>!b.weg).map(b=>b.ordner+'/'+b.id)},n=D.suche?D.treffer:D.bilder.length,name=albName(aktAlbum);
   if(an?n>50&&!confirm(n+' Fotos ins Album „'+name+'“ aufnehmen?'):!confirm('Alle '+n+' Fotos '+
-   (D.suche?'dieses Filters':'dieses Ordners')+' aus dem Album „'+name+'“ nehmen? Die Fotos selbst bleiben.'))return;
+   (D.suche?'dieses Filters':D.ordner?'dieses Ordners':'dieser Seite')+' aus dem Album „'+name+'“ nehmen? Die Fotos selbst bleiben.'))return;
   albSetzen(Object.assign({album:aktAlbum,an},wo));};
  albAlle.addEventListener('click',()=>alleSetzen(true));albRaus.addEventListener('click',()=>alleSetzen(false));}
 lalbKnopf.addEventListener('click',()=>albenOeffnen(aktiv));lmarkKnopf.addEventListener('click',()=>albumKlick(aktiv,false));
@@ -846,25 +853,32 @@ function vsModus(an){vsAn=an&&!!vsLeiste;document.body.classList.toggle('vs-an',
 function vsListe(){return [...vsGew].filter(i=>!D.bilder[i].weg).sort((a,b)=>a-b);}
 function vsZeigen(){felder.forEach((f,i)=>f.classList.toggle('markiert',vsGew.has(i)));if(!vsLeiste)return;const l=vsListe();
  document.getElementById('vstext').textContent=l.length?(l.length===1?'1 Foto':l.length+' Fotos')+' gewählt: '+
-  l.map(i=>D.bilder[i].name).join(', '):'Fotos anklicken, die nicht in diese Gruppe gehören (Umschalt = Bereich).';
+  l.map(i=>D.bilder[i].name).join(', '):D.aehnlich?'Fotos anklicken, die zum Ausgangsfoto gehören (Umschalt = Bereich).':
+  'Fotos anklicken, die nicht in diese Gruppe gehören (Umschalt = Bereich).';
+ const zu=document.getElementById('vszu');if(zu&&D.aehnlich){zu.hidden=false;zu.disabled=!l.length;
+  zu.textContent='Zu '+D.aehnlich.ordner+' (Ausgangsfoto)';}
  document.getElementById('vsneu').disabled=!l.length||!D.naechster;document.getElementById('vsin').disabled=!l.length;}
 window.feldKlick=(i,ev)=>{if(!vsAn)return false;
  if(ev.shiftKey&&vsLetzte>=0){const an=!vsGew.has(i);for(let k=Math.min(vsLetzte,i);k<=Math.max(vsLetzte,i);k++){
    if(D.bilder[k].weg)continue;if(an)vsGew.add(k);else vsGew.delete(k);}}
  else if(vsGew.has(i))vsGew.delete(i);else vsGew.add(i);vsLetzte=i;vsZeigen();return true;};
 window.vsAus=()=>{if(!vsAn)return false;vsModus(false);return true;};
-async function vsStarten(ziel){const l=vsListe();if(!l.length)return;const was=l.length===1?'1 Foto':l.length+' Fotos';
+async function vsStarten(ziel){const l=vsListe().filter(i=>D.bilder[i].ordner!==ziel);  // schon im Ziel: bleibt
+ if(!l.length){if(vsListe().length)meldung('Die gewählten Fotos liegen schon in Ordner '+ziel+'.',true);return;}
+ const was=l.length===1?'1 Foto':l.length+' Fotos';
  if(!confirm(was+(ziel==='neu'?' in eine neue Gruppe (Ordner '+D.naechster+')':' nach Ordner '+ziel)+' verschieben? '+
   'NEF, Begleitdateien, verbesserte Fassungen, Sterne, Alben, Jahr und Gesichter kommen mit; „Rückgängig“ ist möglich.'))return;
- const [ok,j]=await post('/api/gruppieren',{aktion:'verschieben',pfade:l.map(i=>D.ordner+'/'+D.bilder[i].id),ziel});
+ const [ok,j]=await post('/api/gruppieren',{aktion:'verschieben',pfade:l.map(i=>D.bilder[i].ordner+'/'+D.bilder[i].id),ziel});
  if(!ok){meldung(j.fehler||'Verschieben nicht möglich.',true);return;}
- meldung('Wird verschoben …');const a=await auftragWarten(),leer=(a.entfernt||[]).includes(D.ordner);
+ meldung('Wird verschoben …');const a=await auftragWarten(),leer=!!D.ordner&&(a.entfernt||[]).includes(D.ordner);
+ const hier=D.aehnlich?'/aehnlich?pfad='+encodeURIComponent(D.aehnlich.pfad):'/o/'+D.ordner;  // Ähnliche: neu suchen
  try{sessionStorage.setItem('bestofMeldung',JSON.stringify({text:a.fehler||a.ergebnis,fehler:!!a.fehler,rueck:!a.fehler,
-  nachher:'/o/'+D.ordner,ziel:a.fehler?null:a.zielordner}));}catch(_){}
- location.href=leer&&!a.fehler?'/o/'+a.zielordner:location.pathname;}
+  nachher:hier,ziel:a.fehler?null:a.zielordner}));}catch(_){}
+ location.href=leer&&!a.fehler?'/o/'+a.zielordner:D.aehnlich?hier:location.pathname;}
 if(vsKnopf&&vsLeiste){vsKnopf.addEventListener('click',()=>vsModus(!vsAn));
  document.getElementById('vsende').addEventListener('click',()=>vsModus(false));
  document.getElementById('vsneu').addEventListener('click',()=>vsStarten('neu'));
+ const zu=document.getElementById('vszu');if(zu&&D.aehnlich)zu.addEventListener('click',()=>vsStarten(D.aehnlich.ordner));
  document.getElementById('vsform').addEventListener('submit',ev=>{ev.preventDefault();
   const z=document.getElementById('vsziel').value.replace(/\\D/g,'');
   if(!z){meldung('Bitte die Nummer des Zielordners eingeben, z. B. 0012.',true);return;}
@@ -1138,8 +1152,9 @@ def fassung_name(name, original):
     return stamm.replace("_", " ").strip() or "verbessert"
 
 
-def bogen_html(app, eintraege, einordner):
-    """eintraege: [(ordner, name, mtime, groesse)] -> (HTML der Felder, Bilddaten für JS)."""
+def bogen_html(app, eintraege, einordner, abzeichen=None):
+    """eintraege: [(ordner, name, mtime, groesse)] -> (HTML der Felder, Bilddaten für JS). abzeichen: {„0004/<id>“:
+    (Text, Titel, Klasse)} – ein Schild unten rechts im Foto, z. B. der Abstand auf der Seite „Ähnliche Fotos“."""
     meta, gesichter = bild_daten(app, None, [(o, n) for o, n, *_ in eintraege])
     alben = alben_von(app.index, [f"{o}/{url_id(n)}" for o, n, *_ in eintraege]) if app.index else {}
     masse = []
@@ -1202,6 +1217,8 @@ def bogen_html(app, eintraege, einordner):
             f'<path pathLength="100" d="{stift_pfad(f"{o}{name}")}"/></svg>'
             f'<span class="buchstabe" aria-hidden="true"></span>{nr}'
             + (f'<span class="vbadge" title="Fassung im Unterordner verbessert">✦ {e(wf)}</span>' if wf else "")
+            + (f'<span class="abadge {ab[2]}" title="{e(ab[1])}">{e(ab[0])}</span>'
+               if (ab := (abzeichen or {}).get(rel)) else "")
             + '</div>'
             f'<figcaption><span class="lfd">{i + 1}</span><span class="dateiname" title="{e(name)}">'
             f'{e(os.path.basename(name))}</span>'
@@ -1275,6 +1292,7 @@ LUPE_HTML = ('<div class="lupe" hidden role="dialog" aria-label="Lupe"><div clas
              '<button class="knopf alb" type="button" title="Alben zuordnen (Taste A)">Alben</button>'
              '<button class="knopf gz" type="button" title="Taste G">Gesichter</button>'
              '<a class="knopf karte" target="_blank" rel="noopener noreferrer">Karte</a>'
+             '<a class="knopf aehnl" title="Ähnliche Fotos im Archiv suchen – nach Ähnlichkeit sortiert">≈ Ähnliche</a>'
              '<a class="knopf orig" target="_blank" rel="noopener">Original</a>'
              '<button class="knopf zu" type="button">Schließen</button></div>' + BEARBEITUNG_HTML + '</div>')
 
@@ -1311,9 +1329,9 @@ def bogen_hilfe(app, einordner=False):
             f'mit „Rückgängig“; endgültig löschen geht nur im Dateimanager). In der Lupe: <kbd>←</kbd> <kbd>→</kbd> '
             f'blättern, <kbd>Leertaste</kbd> oder <kbd>S</kbd> Stern, <kbd>Entf</kbd> Papierkorb, <kbd>V</kbd> '
             f'Vorher/Nachher, ')
-    verbessern = (' „✦ Verbessern“ in der Lupe schickt das Foto an ComfyUI; die neue Fassung kommt in den Unterordner '
-                  f'„{VERBESSERT}“ und steht nach dem Neuladen als eigene Kachel hinter dem Original.'
-                  if app.verbesserer else '')
+    verbessern = ' „≈ Ähnliche“ in der Lupe sucht die ähnlichsten Fotos im ganzen Archiv.' + (
+        ' „✦ Verbessern“ in der Lupe schickt das Foto an ComfyUI; die neue Fassung kommt in den Unterordner '
+        f'„{VERBESSERT}“ und steht nach dem Neuladen als eigene Kachel hinter dem Original.' if app.verbesserer else '')
     if farb_daten(app):
         verbessern += (' „◐ Kolorieren“ färbt das gezeigte Foto ein – das Original direkt oder eine verbesserte Fassung '
                        '(…_koloriert.png); Helligkeit und Details bleiben die des Fotos.')
@@ -1352,6 +1370,7 @@ def ordner_zusammen(app, ordner):
 
 
 VERSCHIEBEN_HTML = """<div class="wahlleiste" id="vsleiste" hidden><span id="vstext"></span>
+<button class="knopf haupt" id="vszu" type="button" hidden disabled></button>
 <button class="knopf haupt" id="vsneu" type="button" disabled>In neue Gruppe ({naechster})</button>
 <form class="vsin" id="vsform"><input id="vsziel" class="pname" inputmode="numeric" maxlength="5" placeholder="Ordner"
  aria-label="Nummer des Zielordners" autocomplete="off"><button class="knopf" id="vsin" disabled>In diesen Ordner</button></form>

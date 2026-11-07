@@ -71,6 +71,11 @@ Fotos verschieben (Ordnerseite, Knopf „Fotos verschieben …“):
   Fotos anklicken, die nicht in den Ordner gehören (Umschalt = Bereich), dann „In neue Gruppe“ (nächste freie
   Ordnernummer) oder Nummer eines vorhandenen Ordners + „In diesen Ordner“. NEF, Begleitdateien, Fassungen, Sterne,
   Alben, Jahr und Gesichter wandern mit; „Rückgängig“ in der Meldung, ein leerer Ordner verschwindet.
+Ähnliche Fotos (Lupe, Knopf „≈ Ähnliche“):
+  Die ähnlichsten Fotos im ganzen Archiv, nach Ähnlichkeit sortiert; fotosort.py rechnet wie beim Import. Abstand =
+  verschiedene Bits von pHash und dHash: 0 = gleich, um 60 = ganz verschieden, bis SCHWELLE kämen die Fotos beim
+  Import in eine Gruppe. Höchstens AEHNLICH_ANZAHL (150) Fotos bis Abstand AEHNLICH_BIS (48). „Fotos verschieben …“
+  bringt gewählte Fotos in den Ordner des Ausgangsfotos, in eine neue Gruppe oder einen anderen Ordner.
 Einstellungen (Seite „Einstellungen“):
   Ähnlichkeit beim Import, Workflows (Vorwahl, eigener fürs Kolorieren, hochladen), Kolorieren, Anzeige,
   Personen, Import – geschrieben in bestof.conf, gültig sofort. „Neu gruppieren“ gruppiert dort das ganze Archiv
