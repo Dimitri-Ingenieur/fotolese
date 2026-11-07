@@ -93,6 +93,8 @@ Ordneransicht: unter jedem Foto Auflösung, Dateigröße und – falls vorhanden
   die höchste Auflösung im Ordner ist gelb markiert.
 Alben (Seite „Alben“: anlegen, umbenennen, löschen):
   Ein Foto kann in beliebig vielen Alben stehen; unter jedem Foto stehen seine Alben, ein Klick darauf filtert.
+  Ein Album zeigt sich in Gruppen: je Ordner eine Kachel, Vorschau = Foto mit Stern, sonst das zuletzt geänderte
+  (gilt auch auf der Ordner-Übersicht); Klick = die Fotos der Gruppe einzeln. „Gruppen | Einzeln“ schaltet um.
   Markieren: über den Fotos „Fotos markieren für Album …“ wählen (oder „Neues Album“), dann ＋ unter den Fotos
   (Umschalt = alle bis zum zuletzt angeklickten) oder in der Lupe Taste A; „Alle hinzufügen“ nimmt den ganzen
   Ordner bzw. alle Treffer des Filters. Ohne gewähltes Album öffnet ＋ die Liste aller Alben zum Ankreuzen.
@@ -109,6 +111,8 @@ Filter im Suchfeld, Begriffe mit Komma trennen:
   Juli 2023 | 2023-07 | 0012 (Ordner) | Person 7 | ohne Jahr | Jahr korrigiert | Teil eines Dateinamens
   Album Urlaub (oder nur Urlaub) | ohne Album   -> mehrere Alben: Fotos aus einem davon
   Alle Fotos (Knopf neben „Filtern“)            -> das ganze Archiv nach Datum, z. B. zum Einordnen
+  Gruppen | Einzeln (neben den Chips)           -> Treffer je Ordner als Kachel oder jedes Foto einzeln; ein Album
+                                                   zeigt sich in Gruppen, alles andere einzeln
   Ohne Album (Knopf daneben)                    -> nur Fotos, die noch in keinem Album sind; eingeordnete werden
                                                    blass, nach dem Neuladen bleiben die übrigen
 

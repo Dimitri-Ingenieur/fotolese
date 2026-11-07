@@ -156,7 +156,8 @@ class Handler(BaseHTTPRequestHandler):
         if teile.path == "/":
             return self._senden(200, html_typ, uebersicht(app, q.get("filter", ["alle"])[0], zahl_param("seite")))
         if teile.path == "/suche":
-            return self._senden(200, html_typ, such_seite(app, q.get("q", [""])[0][:300], zahl_param("seite")))
+            return self._senden(200, html_typ, such_seite(app, q.get("q", [""])[0][:300], zahl_param("seite"),
+                                                          q.get("ansicht", [""])[0][:10]))
         if teile.path == "/personen" and "gruppe" in q and app.index:
             try:
                 inhalt = gruppe_pruefen_seite(app, int(q["gruppe"][0]))

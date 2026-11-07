@@ -139,7 +139,7 @@ def suche_ausfuehren(app, text):
     if not app.index:
         return [], erklaerung
     # bild_eff: von Hand gesetztes Jahr vor EXIF/Dateiname; der Monat gilt dann als unbekannt
-    sql, args = ["SELECT ordner, datei, zeit, ort, ort_km, lat, lon FROM bild_eff WHERE 1=1"], []
+    sql, args = ["SELECT ordner, datei, zeit, ort, ort_km, lat, lon, sortzeit FROM bild_eff WHERE 1=1"], []
     if jahre:  # gleiche Art ODER, verschiedene Arten UND: „2023, Juli“ = Juli 2023
         sql.append(f"AND jahr_eff IN ({','.join('?' * len(jahre))})")
         args += sorted(jahre)

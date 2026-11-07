@@ -27,7 +27,8 @@ auch selbst aufrufen – dann müssen Sie fotosort.py nicht von Hand starten.
 - je Ordner bis zu 3 beste Fotos mit Stern ☆ markieren → Kopie in `Sortiert/BestOf`
 - Index mit Datum, Ort und Gesichtern; Filter wie `2023, Leipzig, Anna` ([mehr](#filter))
 - Gesichter benennen; lernt aus Ihren Korrekturen (`bestof.conf`)
-- Alben: jedes Foto in beliebig vielen Alben, sichtbar unter dem Foto, im Filter nutzbar ([mehr](#alben))
+- Alben: jedes Foto in beliebig vielen Alben, sichtbar unter dem Foto, im Filter nutzbar; ein Album zeigt
+  sich in Gruppen – je Ordner eine Kachel, Vorschau das Foto mit Stern, sonst das zuletzt geänderte ([mehr](#alben))
 - „Alle Fotos“, „Ohne Album“ und Jahr per Klick: das Archiv durchgehen, Alben und Jahre schnell zuordnen
   ([mehr](#alle-fotos-und-jahr-per-klick))
 - Ähnliche Fotos mit KI: „≈ Ähnliche“ in der Lupe zeigt die ähnlichsten Fotos im ganzen Archiv – verglichen wird
@@ -130,7 +131,8 @@ ganz ab.
 Das Suchfeld oben auf jeder Seite filtert das ganze Archiv (dafür braucht es den Index, `INDEX = 1`,
 Standard). Begriffe mit Komma trennen; die Chips unter dem Feld zeigen, wie bestof.py jeden Begriff
 verstanden hat. Die Treffer stehen nach Datum, 240 je Seite, Fotos ohne Datum am Ende. Groß- und
-Kleinschreibung spielt keine Rolle.
+Kleinschreibung spielt keine Rolle. „Gruppen | Einzeln“ neben den Chips zeigt die Treffer je Ordner als
+Kachel oder jedes Foto einzeln; ein Album erscheint in Gruppen ([mehr](#alben)), alles andere einzeln.
 
 | Eingabe | zeigt |
 |---|---|
@@ -175,6 +177,13 @@ Gut zu wissen:
 
 Ein Foto kann in beliebig vielen Alben stehen, z. B. in „Urlaub 2023“ und „Familie“. Unter jedem Foto
 stehen seine Alben; ein Klick darauf zeigt alle Fotos des Albums.
+
+**Ein Album zeigt sich in Gruppen:** je Ordner eine Kachel mit der Zahl seiner Fotos im Album, nach Datum.
+Vorschau ist das Foto mit Stern; hat die Gruppe im Album keins, das zuletzt geänderte – etwa eine eben
+verbesserte oder bearbeitete Fassung. Ein Klick auf die Kachel zeigt die Fotos der Gruppe einzeln (der Filter
+bekommt die Ordnernummer dazu, z. B. `Urlaub 2023, 0012`), mit Lupe, Stern und allem. „Gruppen | Einzeln“ über
+den Kacheln schaltet um; „Einzeln“ zeigt alle Fotos des Albums wie bisher, z. B. zum Markieren mit ＋. Dieselbe
+Regel für das Vorschaubild gilt auf der Ordner-Übersicht.
 
 1. **Album anlegen** – auf der Seite „Alben“ oder mit „Neues Album“ über den Fotos. Beim Import geht es
    in einem Schritt: Feld „Album“ auf der Seite „Import“ ([mehr](#import-im-browser)).

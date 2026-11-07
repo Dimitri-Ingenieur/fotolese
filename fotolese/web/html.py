@@ -39,6 +39,7 @@ button,input{font:inherit;color:inherit}
 .navi a,.knopf{display:inline-block;padding:6px 12px;border:1px solid var(--linie);background:none;
   text-decoration:none;cursor:pointer;border-radius:2px}
 .navi a[aria-current]{background:var(--text);color:var(--umfeld);border-color:var(--text)}
+.filter .navi.ansicht{margin-left:auto}  /* „Gruppen | Einzeln“ rechts neben den Chips */
 .knopf:hover,.navi a:hover{border-color:var(--leise)}
 .knopf[disabled]{opacity:.45;cursor:default}
 .suche{display:flex;gap:6px;flex:1 1 22em;max-width:36em}
@@ -1054,6 +1055,15 @@ def korb_knopf(taste=""):
             f'<path d="M4 7h16M10 7V4.5h4V7M6.2 7l1 13h9.6l1-13M10 11v6M14 11v6"/></svg></button>')
 
 
+def titelbild(bilder, markiert):
+    """Vorschaubild einer Gruppe (Ordner, im Album nur dessen Fotos darin): das Foto mit Stern – bei mehreren das zuerst
+    markierte –, sonst das zuletzt geänderte (jüngste Änderungszeit, z. B. eine eben verbesserte Fassung).
+    bilder: [(Name, Größe, mtime)], markiert: Namen in Markier-Reihenfolge."""
+    da = {b[0]: b for b in bilder}
+    stern = next((da[m] for m in markiert if m in da), None)
+    return stern or (max(bilder, key=lambda b: b[2]) if bilder else None)
+
+
 def sterne_svg(n):
     """Auf der Ordnerkachel: ein kleiner Stern je Bild mit Stern (höchstens drei gezeichnet)."""
     if not n:
@@ -1440,8 +1450,16 @@ def ordner_seite(app, ordner):
     return seite(f"{ordner} – BestOf", inhalt, JS_BOGEN + JS_ALBEN + JS_VERBESSERN + JS_BEARBEITEN + JS_VERSCHIEBEN)
 
 
-def such_seite(app, text, seite_nr):
+def such_seite(app, text, seite_nr, ansicht=""):
+    """Filterergebnis: einzeln (Kontaktbogen) oder als Gruppen – je Ordner eine Kachel. Ein Album zeigt sich als
+    Gruppen, außer der Filter nennt schon einen Ordner; „Gruppen | Einzeln“ schaltet um."""
     zeilen, erklaerung = suche_ausfuehren(app, text) if text.strip() else ([], [])
+    album = any(t.startswith(("Album ", "Alben ")) for t in erklaerung)
+    ordner_begriff = any(t.startswith("Ordner ") for t in erklaerung)
+    ansicht = ansicht if ansicht in ("gruppen", "einzeln") else ""
+    gruppen = ansicht == "gruppen" or (not ansicht and album and not ordner_begriff)
+    if gruppen and zeilen:
+        return _gruppen_seite(app, text, zeilen, erklaerung, seite_nr, ansicht)
     gesamt = len(zeilen)
     pro = 240
     seiten = max(1, -(-gesamt // pro))
@@ -1460,7 +1478,8 @@ def such_seite(app, text, seite_nr):
              + ('<p class="leise" id="ohnealbum"></p>' if ohne_album and eintraege else "") + '</div></div>')
     inhalt = kopf(app, "", titel, text)
     if erklaerung:
-        inhalt += f'<div class="filter" aria-label="Erkannter Filter">{chips}</div>'
+        inhalt += (f'<div class="filter" aria-label="Erkannter Filter">{chips}'
+                   + (_ansicht_schalter(text, "einzeln") if eintraege else "") + '</div>')
     if not text.strip():
         inhalt += ('<p class="leer">Geben Sie Begriffe mit Komma getrennt ein, z. B. 2023, Leipzig, Anna – '
                    'oder „Alle Fotos“ für das ganze Archiv. Reisen + Paris zeigt die Fotos, die in beiden Alben '
@@ -1471,7 +1490,8 @@ def such_seite(app, text, seite_nr):
         inhalt += '<p class="leer">Keine Fotos passen zu allen Begriffen. Entfernen Sie einen Begriff oder prüfen Sie die Schreibweise.</p>'
     else:
         inhalt += ((ALBUMLEISTE if app.index else "") + f'<main class="bogen">{felder}</main>'
-                   + seiten_nav(seite_nr, seiten, lambda n: "/suche?" + urlencode({"q": text, "seite": n}))
+                   + seiten_nav(seite_nr, seiten, lambda n: "/suche?" + urlencode(
+                       {"q": text, "seite": n, **({"ansicht": ansicht} if ansicht else {})}))
                    + bogen_hilfe(app))
     inhalt += LUPE_HTML + (ALBBOX if app.index else "")
     ordner_menge = sorted({o for o, *_ in eintraege})
@@ -1485,6 +1505,57 @@ def such_seite(app, text, seite_nr):
           "vorwahl": app.verbesserer.vorwahl if app.verbesserer else ""}
     inhalt += f'<script type="application/json" id="daten">{json_im_html(js)}</script>'
     return seite(f"{text} – BestOf", inhalt, JS_BOGEN + JS_ALBEN + JS_VERBESSERN + JS_BEARBEITEN)
+
+
+def _ansicht_schalter(text, aktiv):
+    """„Gruppen | Einzeln“ über einem Filterergebnis."""
+    return ('<nav class="navi ansicht" aria-label="Ansicht">' + "".join(
+        f'<a href="/suche?{urlencode({"q": text, "ansicht": k})}"{" aria-current=page" if k == aktiv else ""} '
+        f'title="{t}">{k.capitalize()}</a>' for k, t in (("gruppen", "Je Ordner eine Kachel – Vorschau: Foto mit Stern, sonst "
+                                                         "das zuletzt geänderte"), ("einzeln", "Jedes Foto einzeln")))
+            + '</nav>')
+
+
+def _gruppen_seite(app, text, zeilen, erklaerung, seite_nr, ansicht):
+    """Filterergebnis als Gruppen: je Ordner eine Kachel mit den passenden Fotos darin – Vorschau nach titelbild(),
+    Anzahl, Sterne, Datum und Ort. Ein Klick zeigt die Fotos der Gruppe einzeln (Filter + Ordnernummer)."""
+    je = {}
+    for z in zeilen:  # nach Datum sortiert: die Gruppen in der Reihenfolge ihres frühesten Fotos
+        je.setdefault(z[0], []).append(z)
+    liste = list(je.items())
+    seiten = max(1, -(-len(liste) // app.pro_seite))
+    seite_nr = min(max(1, seite_nr), seiten)
+    kacheln = []
+    for o, zs in liste[(seite_nr - 1) * app.pro_seite: seite_nr * app.pro_seite]:
+        alle = app.archiv.bilder(o)
+        namen = {name_aus_id(z[1]) for z in zs}
+        bilder = [b for b in alle if b[0] in namen]
+        if not bilder:
+            continue  # inzwischen verschoben
+        markiert = [m for m in app.auswahl.markiert(o) if m in namen]
+        tb = titelbild(bilder, markiert)
+        orte = [z[3] for z in zs if z[3]]
+        wann = ", ".join(t for t in (datum_kurz(next((z[7] for z in zs if z[7]), None)),
+                                     max(set(orte), key=orte.count) if orte else "") if t)
+        kacheln.append(
+            f'<a class="kachel gruppe{" gewaehlt" if markiert else ""}" href="/suche?{urlencode({"q": f"{text}, {o}"})}" '
+            f'data-o="{o}" title="Ordner {o}: {len(bilder)} von {bilder_text(len(alle))} – anklicken zeigt sie einzeln">'
+            f'<div class="bild"><img loading="lazy" decoding="async" src="/t/{o}/{url_id(tb[0])}?v={tb[2]}" alt=""></div>'
+            f'<div class="zeile"><span class="nr">{o}</span><span class="leise">{bilder_text(len(bilder))}</span>'
+            f'{sterne_svg(len(markiert))}</div><span class="leise wann">{e(wann)}</span></a>')
+    stand = (f"{bilder_text(len(zeilen))} in {len(liste)} {'Gruppe' if len(liste) == 1 else 'Gruppen'}"
+             + (f", Seite {seite_nr} von {seiten}" if seiten > 1 else ""))
+    titel = f'<div class="titel"><div><p id="info">{stand}</p></div></div>'
+    chips = "".join(f'<span class="chip">{e(t)}</span>' for t in erklaerung)
+    inhalt = (kopf(app, "", titel, text)
+              + f'<div class="filter" aria-label="Erkannter Filter">{chips}{_ansicht_schalter(text, "gruppen")}</div>'
+              + f'<main class="raster">{"".join(kacheln)}</main>'
+              + seiten_nav(seite_nr, seiten, lambda n: "/suche?" + urlencode(
+                  {"q": text, "seite": n, **({"ansicht": ansicht} if ansicht else {})}))
+              + '<p class="hilfe">Eine Gruppe ist ein Ordner mit ähnlichen Fotos; die Kachel zeigt, wie viele seiner '
+                'Fotos zum Filter passen. Vorschau ist das Foto mit Stern, sonst das zuletzt geänderte. Anklicken zeigt '
+                'die Fotos der Gruppe einzeln, „Einzeln“ oben alle Fotos.</p>')
+    return seite(f"{text} – BestOf", inhalt)
 
 
 def personen_gruppen(index, mindest, ignorierte):
@@ -1606,7 +1677,9 @@ def alben_seite(app):
                'Filterergebnis öffnen, oben „Fotos markieren für Album …“ wählen, dann ＋ unter den Fotos anklicken '
                '(mit <kbd>Umschalt</kbd> alle bis zum zuletzt angeklickten) oder in der Lupe <kbd>A</kbd> drücken; „Alle '
                'hinzufügen“ nimmt den ganzen Ordner bzw. alle Treffer. Ohne gewähltes Album öffnet ＋ unter einem Foto '
-               'die Liste aller Alben zum Ankreuzen. Im Filter: <i>Album Urlaub</i> oder nur <i>Urlaub</i>, '
+               'die Liste aller Alben zum Ankreuzen. „Fotos zeigen“ zeigt ein Album in Gruppen: je Ordner eine Kachel, '
+               'Vorschau ist das Foto mit Stern, sonst das zuletzt geänderte; „Einzeln“ zeigt jedes Foto. '
+               'Im Filter: <i>Album Urlaub</i> oder nur <i>Urlaub</i>, '
                '<i>ohne Album</i>. Löschen entfernt nur das Album, nicht die Fotos.</p>')
     return seite("Alben – BestOf", inhalt, JS_ALBENSEITE)
 
@@ -1688,9 +1761,8 @@ def uebersicht(app, filt, seite_nr):
     for o in teil:
         bilder = app.archiv.bilder(o)
         markiert = app.auswahl.markiert(o)
-        titelbild = next((b for b in bilder if b[0] in markiert), bilder[0] if bilder else None)
-        bild = (f'<img loading="lazy" decoding="async" src="/t/{o}/{url_id(titelbild[0])}?v={titelbild[2]}" alt="">'
-                if titelbild else "")
+        tb = titelbild(bilder, markiert)
+        bild = f'<img loading="lazy" decoding="async" src="/t/{o}/{url_id(tb[0])}?v={tb[2]}" alt="">' if tb else ""
         wann = ", ".join(t for t in zusammen.get(o, []) if t)
         kacheln.append(f'<a class="kachel{" gewaehlt" if markiert else ""}" href="/o/{o}" data-o="{o}">'
                        f'<div class="bild">{bild}</div><div class="zeile"><span class="nr">{o}</span>'
