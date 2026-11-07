@@ -117,7 +117,8 @@ Aufruf (Conda-Umgebung von fotosort.py):
   python bestof.py /media/$USER/EXTERN/Sortiert
 
 Tasten im Ordner:  ← / →  voriger / nächster Ordner,  N  nächster Ordner ohne Stern
-Tasten in der Lupe: ← / →  Bild,  Leertaste / S  Stern,  Entf  Papierkorb,  G  Gesichter zeigen,  J  Jahr ändern,
+Tasten in der Lupe: ← / →  Bild (mit der Maus: ‹ › am linken und rechten Bildschirmrand),  Leertaste / S  Stern,
+                    Entf  Papierkorb,  G  Gesichter zeigen,  J  Jahr ändern,
                     V  Vorher/Nachher (verbesserte oder kolorierte Fassung),  Esc  schließen,
                     E  Bearbeiten (darin R / Umschalt+R drehen, H spiegeln, Esc abbrechen),
                     A  Album: ins gewählte Album aufnehmen/herausnehmen, sonst Alben zuordnen

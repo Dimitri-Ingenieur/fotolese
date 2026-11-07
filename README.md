@@ -52,6 +52,7 @@ auch selbst aufrufen – dann müssen Sie fotosort.py nicht von Hand starten.
 - Seite „Import“: Ordner wählen – bestof.py startet fotosort.py, das ihn ins Archiv kopiert ([mehr](#import-im-browser))
 - doppelte Dateien im Archiv → Papierkorb `Sortiert/Musor/Duplikate`
 - Auflösung und Dateigröße unter jedem Foto
+- Lupe: blättern mit den Pfeilen ‹ › fest am linken und rechten Bildschirmrand, mit ← → oder per Wischen
 
 ## Installation
 
@@ -291,7 +292,8 @@ weitere als `…_bearbeitet_2.png`. Das Foto selbst bleibt unverändert. Die Fas
 Alben des Fotos und steht nach dem Neuladen als Kachel „✦ bearbeitet“ direkt dahinter; ohne Drehung zeigt
 gleich danach der Schieber Vorher/Nachher. Bearbeiten lässt sich jedes Foto, auch eine Fassung aus ComfyUI –
 deren Workflow bleibt im PNG. „Abbrechen“ oder <kbd>Esc</kbd> verwirft die Änderungen; solange die Leiste offen
-ist, blättern die Pfeiltasten nicht und Stern und Papierkorb ruhen.
+ist, blättern weder die Pfeiltasten noch die Pfeile ‹ › am Bildschirmrand (die sind dann ausgeblendet), und Stern
+und Papierkorb ruhen.
 
 ### Verbessern mit ComfyUI
 

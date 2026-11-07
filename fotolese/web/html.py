@@ -145,6 +145,16 @@ kbd{font-family:var(--zahl);border:1px solid var(--linie);padding:0 5px;border-r
 .lupe[hidden]{display:none}
 .lupe .flaeche{display:flex;align-items:center;justify-content:center;min-height:0;padding:12px;position:relative;overflow:hidden}
 .lupe img{max-width:100%;max-height:100%;object-fit:contain}
+/* Blättern: Pfeile fest am linken und rechten Bildschirmrand, senkrecht mittig – gleich wo, wie breit das Foto ist */
+.lupe .pfeil{position:absolute;top:50%;transform:translateY(-50%);z-index:4;width:56px;height:112px;padding:0 0 6px;
+  display:flex;align-items:center;justify-content:center;font-size:56px;line-height:1;color:#fff;
+  background:rgba(0,0,0,.3);border:0;border-radius:4px;cursor:pointer;opacity:.75}
+.lupe .pfeil:hover,.lupe .pfeil:focus-visible{opacity:1;background:rgba(0,0,0,.6)}
+.lupe .pfeil.zurueck{left:8px}.lupe .pfeil.vor{right:8px}
+.lupe .pfeil[hidden],.lupe.bearbeiten .pfeil{display:none}
+@media (min-width:700px){.lupe .flaeche{padding:12px 76px}}  /* Platz für die Pfeile: das Foto liegt nie darunter */
+@media (max-width:699px){.lupe .pfeil{width:40px;height:80px;font-size:42px}.lupe .pfeil.zurueck{left:4px}
+  .lupe .pfeil.vor{right:4px}}
 .lupe.gewaehlt .flaeche img{outline:5px solid var(--stift);outline-offset:6px}
 .kasten{position:absolute;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.6);pointer-events:none}
 .kasten button{position:absolute;left:-2px;top:100%;margin-top:3px;white-space:nowrap;font-size:13px;background:#fff;color:#222;
@@ -443,7 +453,7 @@ const felder=[...document.querySelectorAll('.feld')],info=document.getElementByI
 const lupe=document.querySelector('.lupe'),lupeImg=lupe.querySelector('img'),flaeche=lupe.querySelector('.flaeche'),
  lupeWo=lupe.querySelector('.wo'),lupeWer=lupe.querySelector('.wer'),lupeInfo=lupe.querySelector('.info'),
  lupeKnopf=lupe.querySelector('.stern'),lupeOrig=lupe.querySelector('.orig'),lupeKarte=lupe.querySelector('.karte'),
- lupeAehnl=lupe.querySelector('.aehnl'),
+ lupeAehnl=lupe.querySelector('.aehnl'),pfeilZurueck=lupe.querySelector('.pfeil.zurueck'),pfeilVor=lupe.querySelector('.pfeil.vor'),
  gzKnopf=lupe.querySelector('.gz'),lupeJahr=D.jahr?lupe.querySelector('.jahr'):null,lupeJsetz=lupe.querySelector('.jsetz'),
  zusammenEl=document.getElementById('zusammen');
 if(!D.jahr)lupe.querySelector('.jahr').hidden=true;
@@ -613,7 +623,8 @@ function lupeZeichne(){const b=D.bilder[aktiv],l=D.auswahl[b.ordner]||[],an=l.in
  if(lupeJahr&&document.activeElement!==lupeJahr)jahrFeld(lupeJahr,b);jsetzZeichne(lupeJsetz,b);
  lupeKarte.hidden=!b.k;if(b.k)lupeKarte.href=b.k;
  gzKnopf.hidden=!D.gesichter;gzKnopf.textContent='Gesichter'+(b.f.length?' ('+b.f.length+')':'');
- sternKnopf(lupeKnopf,b,an,voll);lupeKnopf.title+=' (Leertaste oder S)';kaesten();albenLupe();verbLupe();}
+ sternKnopf(lupeKnopf,b,an,voll);lupeKnopf.title+=' (Leertaste oder S)';kaesten();albenLupe();verbLupe();pfeileZeichnen();}
+function pfeileZeichnen(){pfeilZurueck.hidden=pfeilVor.hidden=!D.bilder.some((x,k)=>k!==aktiv&&!x.weg);}  // allein: kein Blättern
 function oeffne(i,schritt){bearbeitenAus();const j=sichtbar(i,schritt||1);if(j<0){schliesse();return;}
  vergleichZu(false);nbox.hidden=true;nGesicht=null;aktiv=j;const b=D.bilder[aktiv];
  lupeImg.src=b.g;lupeImg.alt=b.name;lupeOrig.href=b.o;lupeAehnl.href='/aehnlich?pfad='+encodeURIComponent(b.ordner+'/'+b.id);lupe.hidden=false;lupeZeichne();if(gesichterAn)gesichterHolen(aktiv);
@@ -623,8 +634,8 @@ function schliesse(){if(aktiv<0)return;vergleichZu(false);nbox.hidden=true;nGesi
  lupeImg.removeAttribute('src');
  kaesten();f.querySelector('.rahmen').focus({preventScroll:true});f.scrollIntoView({block:'nearest'});}
 lupeImg.addEventListener('load',kaesten);window.addEventListener('resize',kaesten);
-lupe.querySelector('.zurueck').addEventListener('click',()=>oeffne(aktiv-1,-1));
-lupe.querySelector('.vor').addEventListener('click',()=>oeffne(aktiv+1));
+pfeilZurueck.addEventListener('click',()=>oeffne(aktiv-1,-1));
+pfeilVor.addEventListener('click',()=>oeffne(aktiv+1));
 lupe.querySelector('.zu').addEventListener('click',schliesse);
 function gesichterUmschalten(){vergleichZu(true);gesichterAn=!gesichterAn;if(!gesichterAn)nbox.hidden=true;
  else gesichterHolen(aktiv);kaesten();}
@@ -1258,6 +1269,8 @@ BEARBEITUNG_HTML = (
 
 LUPE_HTML = ('<div class="lupe" hidden role="dialog" aria-label="Lupe"><div class="flaeche"><img alt="">'
              '<img class="nachher" alt="" hidden><div class="trenner" hidden></div>'
+             '<button class="pfeil zurueck" type="button" aria-label="Voriges Bild" title="Voriges Bild (Taste ←)">‹</button>'
+             '<button class="pfeil vor" type="button" aria-label="Nächstes Bild" title="Nächstes Bild (Taste →)">›</button>'
              '<a class="vlabel" target="_blank" rel="noopener" hidden title="Datei öffnen">Vorher ↗</a>'
              '<a class="vlabel" target="_blank" rel="noopener" hidden title="Datei öffnen">Nachher ↗</a>'
              '<p class="vstatus" hidden role="status"></p>'
@@ -1274,8 +1287,6 @@ LUPE_HTML = ('<div class="lupe" hidden role="dialog" aria-label="Lupe"><div clas
              '<button class="knopf jsetz" type="button" hidden></button>'
              '<span class="text"><span class="wer"></span>'
              '<span class="info"></span><span class="lalben" hidden></span></span>'
-             '<button class="knopf zurueck" type="button" aria-label="Voriges Bild">‹</button>'
-             '<button class="knopf vor" type="button" aria-label="Nächstes Bild">›</button>'
              + STERN_KNOPF + korb_knopf(" – Taste Entf") +
              '<button class="knopf bearb" type="button" title="Drehen, spiegeln, Helligkeit, Kontrast, Sättigung – '
              'gespeichert wird eine neue Fassung, das Foto bleibt (Taste E)">✎ Bearbeiten</button>'
@@ -1328,8 +1339,8 @@ def bogen_hilfe(app, einordner=False):
     """Hilfezeile unter dem Kontaktbogen (Ordner und Filter)."""
     text = (f'Bild anklicken zum Vergrößern. ☆ unter dem Bild = Stern: kopiert es nach BestOf (je Ordner höchstens '
             f'{app.auswahl.max_best}). Der Eimer daneben schiebt das Foto in den Papierkorb (Ordner {PAPIERKORB}, '
-            f'mit „Rückgängig“; endgültig löschen geht nur im Dateimanager). In der Lupe: <kbd>←</kbd> <kbd>→</kbd> '
-            f'blättern, <kbd>Leertaste</kbd> oder <kbd>S</kbd> Stern, <kbd>Entf</kbd> Papierkorb, <kbd>V</kbd> '
+            f'mit „Rückgängig“; endgültig löschen geht nur im Dateimanager). In der Lupe: ‹ › am Bildschirmrand oder '
+            f'<kbd>←</kbd> <kbd>→</kbd> blättern, <kbd>Leertaste</kbd> oder <kbd>S</kbd> Stern, <kbd>Entf</kbd> Papierkorb, <kbd>V</kbd> '
             f'Vorher/Nachher, ')
     verbessern = ' „≈ Ähnliche“ in der Lupe sucht die ähnlichsten Fotos im ganzen Archiv.' + (
         ' „✦ Verbessern“ in der Lupe schickt das Foto an ComfyUI; die neue Fassung kommt in den Unterordner '
