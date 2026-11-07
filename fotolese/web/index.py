@@ -20,7 +20,7 @@ import numpy as np
 
 from fotolese.web import gpu
 from fotolese.web.konst import GEONAMES_URL, MODELLE
-from fotolese.web.konfig import bilder_text, name_aus_id, url_id
+from fotolese.web.konfig import bilder_text, url_id
 from fotolese.web.orte import Orte
 from fotolese.web.gesichter import _iw_init, _iw_job, _ueberlappung
 
@@ -233,14 +233,6 @@ class Indexer(threading.Thread):
                 db.execute("UPDATE person SET summe=?, anzahl=? WHERE id=?", (neu.astype(np.float32).tobytes(),
                                                                               max(rest, 0), person))
 
-    def _stand(self, ordner, datei):
-        """(Größe, mtime_ns) der Datei auf der Platte oder None."""
-        try:
-            st = os.stat(os.path.join(self.app.archiv.pfad, ordner, name_aus_id(datei)))
-            return st.st_size, st.st_mtime_ns
-        except OSError:
-            return None
-
     def _schreiben(self, ergebnisse):
         with self.index.lock:
             db = self.index.db
@@ -252,8 +244,6 @@ class Indexer(threading.Thread):
                 neue, erbe = r["gesichter"], {}
                 vorher = db.execute("SELECT groesse, mtime FROM bild WHERE pfad=?", (rel,)).fetchone()
                 unveraendert = vorher is not None and tuple(vorher) == (r["groesse"], r["mtime"])
-                if not unveraendert and vorher is not None and self._stand(ordner, datei) == tuple(vorher):
-                    continue  # Index kennt die Datei schon neuer (gerade gedreht) – dieses Ergebnis ist veraltet
                 if neue is not None:
                     # Gesicht an gleicher Stelle erbt die Zuordnung: Namen, Korrekturen, „kein Gesicht“
                     paare = sorted(((_ueberlappung(a[3:7], n[:4]), i, j) for i, a in enumerate(alte)

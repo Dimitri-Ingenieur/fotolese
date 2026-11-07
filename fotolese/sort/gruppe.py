@@ -23,22 +23,16 @@ else:  # numpy < 2.0
         return _LUT[x.view(np.uint8)].reshape(x.shape + (8,)).sum(axis=-1, dtype=np.uint8)
 
 
-def duplikate_finden(bilder, bestand, cache, jobs, gedreht=None):
+def duplikate_finden(bilder, bestand, cache, jobs):
     """Eingabebilder, deren Inhalt (SHA-256) es schon im Bestand oder weiter vorn in der Eingabe gibt.
-    Geprüft werden nur Dateien gleicher Größe – alle anderen können nicht gleich sein. gedreht: in bestof gedrehte
-    Fotos, {SHA-256 jetzt: (SHA-256 vorher, Größe vorher, Größe jetzt)} – liegt so ein Foto im Bestand, gilt auch
-    sein Inhalt von vor dem Drehen als vorhanden.
+    Geprüft werden nur Dateien gleicher Größe – alle anderen können nicht gleich sein.
     Rückgabe: {Eingabepfad: Pfad der gleichen Datei}."""
-    gedreht = gedreht or {}
     bestand_nach_groesse = defaultdict(list)
     for d in bestand:
         bestand_nach_groesse[d.groesse].append(d)
     anzahl_ein = Counter(d.groesse for d in bilder)
-    vorher_groessen = {g for _, g, _ in gedreht.values()}
-    ein = [d for d in bilder if d.groesse in bestand_nach_groesse or anzahl_ein[d.groesse] > 1
-           or d.groesse in vorher_groessen]
-    groessen = {d.groesse for d in ein} | {jetzt for _, g, jetzt in gedreht.values() if g in anzahl_ein}
-    alt = [b for g in sorted(groessen) for b in bestand_nach_groesse.get(g, [])]
+    ein = [d for d in bilder if d.groesse in bestand_nach_groesse or anzahl_ein[d.groesse] > 1]
+    alt = [b for g in sorted({d.groesse for d in ein}) for b in bestand_nach_groesse.get(g, [])]
     pruefen = ein + alt
     if not pruefen:
         return {}
@@ -67,9 +61,6 @@ def duplikate_finden(bilder, bestand, cache, jobs, gedreht=None):
     for b in alt:
         if b.pfad in shas:
             bekannt.setdefault(shas[b.pfad], b.pfad)
-    for jetzt, (vorher, _, _) in gedreht.items():  # gedrehtes Foto im Bestand: seinen Inhalt von vorher gibt es schon
-        if jetzt in bekannt:
-            bekannt.setdefault(vorher, bekannt[jetzt])
     doppelt = {}
     for d in sorted(ein, key=lambda d: d.pfad):
         s = shas.get(d.pfad)

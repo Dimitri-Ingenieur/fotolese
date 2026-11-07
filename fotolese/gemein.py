@@ -1,11 +1,9 @@
 """fotolese.gemein – Helfer, die fotosort (sort) und bestof (web) gemeinsam nutzen.
 
 Vereinheitlicht den zuvor in beiden Skripten doppelt vorhandenen Code:
-Einstellungen (_env), SHA-256, das Datum aus dem Dateinamen, die Namen der Ordner im Archiv und die Liste der in
-bestof gedrehten Fotos.
+Einstellungen (_env), SHA-256, das Datum aus dem Dateinamen und die Namen der Ordner im Archiv.
 """
 import hashlib
-import json
 import os
 import re
 import sys
@@ -54,21 +52,6 @@ def _env(name, standard, typ=str, konfig=None, quelle=None):
     if quelle is not None:
         quelle[name] = woher
     return wert
-
-
-# In bestof gedrehte oder gespiegelte Fotos: SORTIERT/.bestof-gedreht.json, Prüfsumme jetzt -> Inhalt von vorher
-GEDREHT = ".bestof-gedreht.json"
-
-
-def gedrehte_laden(archiv):
-    """{SHA-256 jetzt: (SHA-256 vorher, Größe vorher, Größe jetzt)} der in bestof gedrehten Fotos. Für die Duplikat-
-    suche beim Import: Der Inhalt von vor dem Drehen gilt als vorhanden, solange das gedrehte Foto im Archiv liegt."""
-    try:
-        with open(os.path.join(archiv, GEDREHT), encoding="utf-8") as f:
-            daten = json.load(f)["gedreht"]
-        return {jetzt: (v["vorher"], int(v["vorher_groesse"]), int(v["groesse"])) for jetzt, v in daten.items()}
-    except (OSError, ValueError, KeyError, TypeError, AttributeError):
-        return {}
 
 
 def sha256(pfad):

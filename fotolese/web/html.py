@@ -108,12 +108,9 @@ button,input{font:inherit;color:inherit}
 .knopf.stern:hover{color:var(--stift)}
 .gewaehlt .stern{border-color:var(--stift);color:var(--stift)}.gewaehlt .stern svg{fill:currentColor}
 .voll .stern{opacity:.45}
-.knopf.korb,.knopf.ikon{flex:none;display:inline-flex;align-items:center;justify-content:center;padding:6px 8px;
-  color:var(--leise)}
-.korb svg,.ikon svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;
-  stroke-linejoin:round}
+.knopf.korb{flex:none;display:inline-flex;align-items:center;justify-content:center;padding:6px 8px;color:var(--leise)}
+.korb svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 .knopf.korb:hover{color:var(--fehler);border-color:var(--fehler)}
-.knopf.ikon:hover{color:var(--text)}.knopf.ikon:disabled{opacity:.45}
 .knopf.holen{display:none;flex:none;font-size:13px;padding:5px 9px}
 /* weggeworfen: Kachel bleibt stehen (nichts rutscht unter den Mauszeiger), „Zurückholen“ an derselben Stelle */
 .feld.weg .holen{display:inline-block}
@@ -634,8 +631,6 @@ document.addEventListener('keydown',ev=>{
   else if(ev.key==='v'||ev.key==='V'){vergleichAn(!vergleich);ev.preventDefault();}
   else if((ev.key==='j'||ev.key==='J')&&lupeJahr){lupeJahr.focus();lupeJahr.select();ev.preventDefault();}
   else if(ev.key==='a'||ev.key==='A'){albumTaste();ev.preventDefault();}
-  else if(ev.key==='r'||ev.key==='R'){drehen(ev.shiftKey?'links':'rechts');ev.preventDefault();}
-  else if(ev.key==='h'||ev.key==='H'){drehen('spiegeln');ev.preventDefault();}
   else if(ev.key==='Escape'){schliesse();}
  }else if(D.einordner){
   if(ev.key==='ArrowRight'&&D.weiter)location.href=D.weiter;
@@ -879,7 +874,7 @@ function farbWf(){return FARBE?(FARBE.workflow||(VW.length&&wfAktuell().farbe?wf
 function vPaar(b){return b.paar||(b.ng?[b.g,b.ng]:b.vg?[b.vg,b.g]:null);}  // [vorher, nachher]
 function origVon(g){return g.replace('/g/','/orig/').replace(/[?]v=.*$/,'');}
 function vJob(i){return Object.values(vJobs).find(j=>j.i===i&&j.s.laeuft);}
-function verbLupe(){if(aktiv<0)return;drehKnoepfe();const b=D.bilder[aktiv],job=vJob(aktiv),fw=farbWf(),
+function verbLupe(){if(aktiv<0)return;const b=D.bilder[aktiv],job=vJob(aktiv),fw=farbWf(),
   vp=VW.length&&wfAktuell().prompt;  // vp: beim Verbessern kommen die Farbhinweise in den Prompt des Workflows
  verbKnopf.hidden=!VW.length;wfWahl.hidden=VW.length<2;verbKnopf.disabled=farbKnopf.disabled=!!job;
  farbKnopf.hidden=!fw;farbHinweis.hidden=!fw&&!vp;farbKnopf.title='Dieses Foto kolorieren'+(fw?' mit „'+fw+'“':'')+
@@ -938,24 +933,6 @@ verbKnopf.addEventListener('click',()=>verbessern('verbessern'));farbKnopf.addEv
 farbHinweis.addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();
  verbessern(farbWf()?'kolorieren':'verbessern');}});
 vglKnopf.addEventListener('click',()=>vergleichAn(!vergleich));
-"""
-
-JS_DREHEN = """
-// Drehen und Spiegeln: ändert die Datei (verlustfrei), danach Lupe, Kachel und Vergleich auf dem neuen Stand
-// dreht mit var: verbLupe fragt es womöglich schon, bevor diese Zeile gelaufen ist
-const DREH_ZURUECK={rechts:'links',links:'rechts',spiegeln:'spiegeln'};var dreht=false;
-function drehKnoepfe(){const job=aktiv>=0&&vJob(aktiv);
- lupe.querySelectorAll('.drehen,.spiegeln').forEach(k=>{k.disabled=dreht||!!job;});}
-async function drehen(art,i){if(i===undefined)i=aktiv;const b=D.bilder[i];if(!b||b.weg||dreht||vJob(i))return;
- dreht=true;drehKnoepfe();const [ok,j]=await post('/api/drehen',{pfad:b.ordner+'/'+b.id,art});dreht=false;drehKnoepfe();
- if(!ok){meldung(j.fehler||'Drehen fehlgeschlagen.',true);return;}
- const alt=b.g;Object.assign(b,j.bild);  // neue Adresse (?v=), Maße, Gesichtskästen
- D.bilder.forEach(x=>{if(x.vg===alt)x.vg=b.g;if(x.ng===alt)x.ng=b.g;if(x.paar)x.paar=x.paar.map(u=>u===alt?b.g:u);});
- const k=felder[i]&&felder[i].querySelector('.rahmen img');if(k)k.src=j.klein;feldMeta(i);
- if(aktiv===i){nennenZu();vergleichZu(false);lupeImg.src=b.g;lupeZeichne();}
- meldung(j.meldung,false,['Rückgängig',()=>drehen(DREH_ZURUECK[art],i)]);}
-lupe.querySelector('.drehen').addEventListener('click',ev=>drehen(ev.shiftKey?'links':'rechts'));
-lupe.querySelector('.spiegeln').addEventListener('click',()=>drehen('spiegeln'));
 """
 
 
@@ -1177,13 +1154,6 @@ def bogen_html(app, eintraege, einordner):
     return "".join(felder), daten
 
 
-DREH_KNOEPFE = ('<button class="knopf ikon drehen" type="button" aria-label="Um 90° drehen" title="Um 90° nach rechts '
-                'drehen – Taste R, mit Umschalt nach links. Ändert die Datei, verlustfrei">'
-                '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20A7 7 0 1 1 19 13M16.5 10.5 19 13l2.5-2.5"/>'
-                '</svg></button><button class="knopf ikon spiegeln" type="button" aria-label="Waagerecht spiegeln" '
-                'title="Waagerecht spiegeln – Taste H. Ändert die Datei, verlustfrei"><svg viewBox="0 0 24 24" '
-                'aria-hidden="true"><path d="M10 6v12H3zM14 6v12h7zM12 3v2m0 3v2m0 3v2m0 3v2"/></svg></button>')
-
 LUPE_HTML = ('<div class="lupe" hidden role="dialog" aria-label="Lupe"><div class="flaeche"><img alt="">'
              '<img class="nachher" alt="" hidden><div class="trenner" hidden></div>'
              '<a class="vlabel" target="_blank" rel="noopener" hidden title="Datei öffnen">Vorher ↗</a>'
@@ -1204,7 +1174,7 @@ LUPE_HTML = ('<div class="lupe" hidden role="dialog" aria-label="Lupe"><div clas
              '<span class="info"></span><span class="lalben" hidden></span></span>'
              '<button class="knopf zurueck" type="button" aria-label="Voriges Bild">‹</button>'
              '<button class="knopf vor" type="button" aria-label="Nächstes Bild">›</button>'
-             + STERN_KNOPF + korb_knopf(" – Taste Entf") + DREH_KNOEPFE +
+             + STERN_KNOPF + korb_knopf(" – Taste Entf") +
              '<select class="wfwahl" aria-label="Workflow zum Verbessern" hidden></select>'
              '<button class="knopf verb" type="button" hidden title="Dieses Foto mit dem gewählten Workflow verbessern – '
              'das Ergebnis kommt in den Unterordner verbessert, das Foto bleibt">✦ Verbessern</button>'
@@ -1350,7 +1320,7 @@ def ordner_seite(app, ordner):
           "verbessern": app.verbesserer.fuer_seite() if app.verbesserer else [], "kolorieren": farb_daten(app),
           "vorwahl": app.verbesserer.vorwahl if app.verbesserer else ""}
     inhalt += f'<script type="application/json" id="daten">{json_im_html(js)}</script>'
-    return seite(f"{ordner} – BestOf", inhalt, JS_BOGEN + JS_ALBEN + JS_VERBESSERN + JS_DREHEN + JS_VERSCHIEBEN)
+    return seite(f"{ordner} – BestOf", inhalt, JS_BOGEN + JS_ALBEN + JS_VERBESSERN + JS_VERSCHIEBEN)
 
 
 def such_seite(app, text, seite_nr):
@@ -1397,7 +1367,7 @@ def such_seite(app, text, seite_nr):
           "verbessern": app.verbesserer.fuer_seite() if app.verbesserer else [], "kolorieren": farb_daten(app),
           "vorwahl": app.verbesserer.vorwahl if app.verbesserer else ""}
     inhalt += f'<script type="application/json" id="daten">{json_im_html(js)}</script>'
-    return seite(f"{text} – BestOf", inhalt, JS_BOGEN + JS_ALBEN + JS_VERBESSERN + JS_DREHEN)
+    return seite(f"{text} – BestOf", inhalt, JS_BOGEN + JS_ALBEN + JS_VERBESSERN)
 
 
 def personen_gruppen(index, mindest, ignorierte):

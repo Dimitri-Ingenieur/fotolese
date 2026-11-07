@@ -31,8 +31,6 @@ auch selbst aufrufen – dann müssen Sie fotosort.py nicht von Hand starten.
   ([mehr](#alle-fotos-und-jahr-per-klick))
 - Papierkorb: ein Klick schiebt ein Foto nach `Sortiert/Musor`, mit „Rückgängig“; endgültig gelöscht wird
   nur im Dateimanager ([mehr](#papierkorb))
-- Drehen um 90° und waagerecht Spiegeln in der Lupe – verlustfrei in der Datei, Gesichter und Namen drehen
-  mit ([mehr](#drehen-und-spiegeln))
 - im Heimnetz erreichbar, z. B. `http://tigris:8765` vom Tablet; importieren nur am Rechner selbst
   ([mehr](#im-heimnetz))
 - Verbessern und Kolorieren mit ComfyUI, zwei eigene Knöpfe in der Lupe: Fassungen kommen in den Unterordner
@@ -213,24 +211,6 @@ bei Bedarf im Dateimanager; dort liegen auch die überzähligen Duplikate (`Muso
 von Hand zurückholen: aus `Musor/0012/` zurück nach `0012/` verschieben – bestof.py liest es wieder ein,
 Namen, Jahr und Alben sind noch da. Ältere Versionen legten Duplikate in den versteckten Ordner
 `Sortiert/.duplikate`; der bleibt, wie er ist.
-
-### Drehen und Spiegeln
-
-Liegt ein Foto auf der Seite oder ist ein Scan seitenverkehrt, hilft die Lupe: Der Knopf mit dem
-Kreispfeil (Taste <kbd>R</kbd>) dreht es um 90° nach rechts, mit Umschalt nach links; der Knopf daneben
-(Taste <kbd>H</kbd>) spiegelt es waagerecht. „Rückgängig“ in der Meldung nimmt den Schritt zurück.
-
-Gedreht wird die Datei selbst, ohne Qualitätsverlust: Bei JPEG ändert bestof.py nur die Ausrichtung im
-EXIF – die Bilddaten bleiben Byte für Byte, jedes Programm zeigt das Foto danach richtig herum. Ein PNG
-(etwa eine Fassung aus ComfyUI) wird gedreht und verlustfrei neu gespeichert; Workflow, Farbprofil und
-EXIF bleiben darin. Die Gesichtskästen drehen mit, Namen und Korrekturen bleiben. Danach sucht der Index
-im gedrehten Bild noch einmal nach Gesichtern – ein Scan, der auf der Seite lag, bekommt so oft erst jetzt
-welche. Hat das Foto einen Stern, wird die Kopie in BestOf erneuert.
-
-Weil sich der Inhalt der Datei ändert, merkt sich bestof.py in `Sortiert/.bestof-gedreht.json` die
-Prüfsumme von vorher: Importieren Sie dieselbe Quelle noch einmal, erkennt fotosort.py das ungedrehte
-Foto weiter als „schon im Archiv“. PNG mit 16 Bit je Farbkanal und animierte PNG lassen sich nicht
-drehen; die Meldung sagt das.
 
 ### Im Heimnetz
 
@@ -457,7 +437,7 @@ fotolese/                    Projektordner
 ├── fotosort.py              Starter für die Kommandozeile → fotolese.sort.cli
 ├── bestof.py                Starter für die Weboberfläche → fotolese.web.cli
 ├── fotolese/                Python-Paket
-│   ├── gemein.py            Helfer für beide: Einstellungen, SHA-256, Datum aus Dateiname, gedrehte Fotos
+│   ├── gemein.py            Helfer für beide: Einstellungen, SHA-256, Datum aus Dateiname
 │   ├── sort/                fotosort: einsammeln, gruppieren, verschieben
 │   │   ├── konst.py         Konstanten, Dateiendungen, optionales rawpy
 │   │   ├── bericht.py       Zahlen- und Größenformate, Fortschritt (#FS-Zeilen für bestof)
@@ -479,7 +459,6 @@ fotolese/                    Projektordner
 │       ├── orte.py          GeoNames offline: GPS → nächster größerer Ort
 │       ├── auswahl.py       Sterne je Ordner, Kopien in BestOf
 │       ├── papierkorb.py    Fotos nach Musor schieben und zurückholen, nie löschen
-│       ├── drehen.py        Drehen und Spiegeln: verlustfrei in der Datei, Index und BestOf nachführen
 │       ├── verbessern.py    Fotos mit ComfyUI verbessern, Fassung in <Ordner>/verbessert
 │       ├── kolorieren.py    Kolorieren: Prompt-Erkennung, Luma-Lock mit ffmpeg
 │       ├── alben.py         Alben: anlegen, Fotos zuordnen, für Filter und Oberfläche

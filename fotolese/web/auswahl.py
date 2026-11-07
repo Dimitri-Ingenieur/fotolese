@@ -6,7 +6,7 @@ import sys
 import threading
 
 from fotolese.web.konst import BESTOF_MUSTER, BUCHSTABEN
-from fotolese.web.konfig import anzeige, bilder_text, url_id
+from fotolese.web.konfig import bilder_text, url_id
 
 
 class Auswahl:
@@ -111,18 +111,6 @@ class Auswahl:
                 self._speichern()
             except OSError:
                 pass
-
-    def auffrischen(self, ordner, name):
-        """Kopie in BestOf erneuern, wenn das Bild einen Stern hat – etwa nachdem es gedreht wurde."""
-        with self.lock:
-            markiert = self.markiert(ordner)
-            if name not in markiert:
-                return
-            try:
-                self._abgleichen(ordner, markiert)
-                self._speichern()
-            except OSError as fehler:
-                print(f"Hinweis: BestOf-Kopie von {ordner}/{anzeige(name)} nicht erneuert ({fehler}).", flush=True)
 
     def umziehen(self, paare):
         """Sterne mitnehmen, wenn Bilder den Ordner wechseln: paare = [(alter Ordner, alter Name, neuer Ordner,

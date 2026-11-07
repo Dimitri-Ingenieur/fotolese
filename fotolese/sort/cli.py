@@ -50,9 +50,7 @@ Umgebungsvariablen (Standard in Klammern):
   AUFRAEUMEN      (1)      leere Quellordner nach dem Verschieben entfernen
   NEF_JPG         (1)      0 = keine JPG aus NEF erzeugen
   DUPLIKATE       (1)      inhaltsgleiche Dateien (SHA-256) nur einmal: Bilder, die es im Bestand schon gibt
-                           oder die in der Eingabe mehrfach vorkommen, werden übersprungen (bleiben liegen);
-                           ein in bestof gedrehtes Foto zählt auch mit seinem Inhalt von vorher
-                           (AUSGABE/.bestof-gedreht.json)
+                           oder die in der Eingabe mehrfach vorkommen, werden übersprungen (bleiben liegen)
   FORTSCHRITT_JSON (0)     1 = Fortschritt als Zeilen „#FS {json}“ auf stdout (für bestof.py)
   CACHE           (~/.cache/fotosort/cache.sqlite3)  Pfad oder 0 = aus
                            merkt sich auch die Bilder im Bestand: Folgeläufe lesen sie nicht neu
@@ -68,7 +66,7 @@ import time
 from collections import Counter
 from datetime import datetime
 
-from fotolese.gemein import _env, gedrehte_laden, ordner_folge
+from fotolese.gemein import _env, ordner_folge
 from fotolese.sort.konst import MAX_ORDNER, VERSION, WINDOWS_FS, rawpy
 from fotolese.sort.bericht import dauer, gb, info, json_zeile, zahl
 from fotolese.sort.bild import analysieren
@@ -164,7 +162,7 @@ def main():
     atexit.register(cache.schliessen)
     doppelt = {}
     if duplikate_an:
-        doppelt = duplikate_finden(bilder, bestand, cache, jobs, gedrehte_laden(ausgabe))
+        doppelt = duplikate_finden(bilder, bestand, cache, jobs)
         for quelle, gleich in sorted(doppelt.items()):  # bestof ordnet beim Import auch diese einem Album zu
             json_zeile({"doppelt": [quelle, gleich]})
         if doppelt:
